@@ -1,0 +1,309 @@
+---
+description: Enforce testing standards, documentation requirements, and issue reporting templates
+globs: ["**/*.{test,spec}.{ts,tsx}", "**/*.md", "**/*.mdx"]
+alwaysApply: false
+paceCoreVersion: "0.6.x"
+rulesVersion: "2025-02-25"
+---
+# Testing & Documentation Standards Guide
+
+**📚 Human-Readable Standard**: See [8-testing-documentation-standards.md](../docs/standards/8-testing-documentation-standards.md) for complete documentation including coverage requirements, test timeouts, and documentation templates.
+
+This guide ensures consistent, high-quality testing and documentation across consuming apps in the PACE suite.
+
+## AI Agent Instructions
+
+**When writing or modifying tests, ALWAYS:**
+1. **Use React Testing Library** - Always use `@testing-library/react` and `userEvent`, never Enzyme or other libraries
+2. **Test user behavior** - Test what users see and do, not implementation details
+3. **Use accessible queries** - Prefer `getByRole`, `getByLabelText` over `getByTestId`
+4. **Include timeouts** - Always include timeout parameters to prevent tests from hanging
+5. **Colocate tests** - Place test files next to source files (`Component.test.tsx` next to `Component.tsx`)
+6. **Use descriptive names** - Test names should clearly describe the behavior being tested
+7. **Group related tests** - Use `describe` blocks to organize related tests
+8. **When fixing testing or documentation issues** - Use the **audit report** (`audit/<timestamp>-pace-core-audit.md`) and the **standard doc** section linked from the report; fix the cause (e.g. test timeouts, testing tools, test file naming), do not silence tools. Re-run **`npm run validate`** to confirm.
+
+**Decision Tree: Writing Tests**
+```
+1. What am I testing?
+   ├─ Component → Use React Testing Library + userEvent
+   ├─ Hook → Test hook in isolation with renderHook
+   ├─ Utility → Test pure function directly
+   └─ Integration → Test user workflows end-to-end
+
+2. How do I query elements?
+   ├─ Interactive element → getByRole (preferred)
+   ├─ Form field → getByLabelText (preferred)
+   ├─ Text content → getByText
+   └─ Last resort → getByTestId (avoid if possible)
+
+3. Is this async?
+   ├─ YES → Use waitFor with timeout
+   └─ NO → Direct assertions
+```
+
+## Testing Patterns
+
+### MUST: Use React Testing Library
+
+**MUST use React Testing Library + userEvent for all component tests:**
+
+```tsx
+// ✅ CORRECT: React Testing Library + userEvent
+import { render, screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
+
+test('button clicks work', async () => {
+  const user = userEvent.setup();
+  const handleClick = vi.fn();
+  render(<Button onClick={handleClick}>Click me</Button>);
+  await user.click(screen.getByRole('button', { name: /click me/i }));
+  expect(handleClick).toHaveBeenCalledTimes(1);
+});
+```
+
+### MUST: Colocate Tests
+
+**Tests MUST be colocated with source files:**
+
+```
+src/
+├── components/
+│   └── EventCard/
+│       ├── EventCard.tsx
+│       └── EventCard.test.tsx
+├── hooks/
+│   ├── useEventData.ts
+│   └── useEventData.test.ts
+└── utils/
+    ├── formatEvent.ts
+    └── formatEvent.test.ts
+```
+
+### MUST: Test User Behavior, Not Implementation
+
+**Tests MUST focus on what users see and do:**
+
+```tsx
+// ❌ WRONG: Testing implementation
+test('calls setState', () => {
+  const component = render(<Counter />);
+  expect(component.state.count).toBe(0);
+});
+
+// ✅ CORRECT: Testing user behavior
+test('displays count and increments on button click', async () => {
+  const user = userEvent.setup();
+  render(<Counter />);
+  expect(screen.getByText('Count: 0')).toBeInTheDocument();
+  await user.click(screen.getByRole('button', { name: /increment/i }));
+  expect(screen.getByText('Count: 1')).toBeInTheDocument();
+});
+```
+
+### MUST: Use Accessible Queries
+
+**MUST prefer accessible queries (byRole, byLabelText, etc.):**
+
+```tsx
+// ✅ CORRECT: Accessible queries
+screen.getByRole('button', { name: /submit/i });
+screen.getByLabelText(/email address/i);
+
+// ❌ AVOID: Non-accessible queries (use as last resort)
+screen.getByTestId('submit-button');
+```
+
+### MUST: Include Timeout Parameters
+
+**Tests MUST include timeout parameters to prevent hanging:**
+
+```tsx
+// ✅ CORRECT: Include timeout parameters
+test('async operation completes', async () => {
+  await waitFor(
+    () => expect(screen.getByText('Loaded')).toBeInTheDocument(),
+    { timeout: 5000 }
+  );
+}, { timeout: 10000 });
+```
+
+**Configure timeouts in `vitest.config.ts`:**
+
+```typescript
+export default defineConfig({
+  test: {
+    testTimeout: 10000, // Default 10 seconds for all tests
+    hookTimeout: 10000,
+  },
+});
+```
+
+### SHOULD: Test Critical Paths
+
+**SHOULD test:**
+- User workflows and interactions
+- Error handling and edge cases
+- Form validation
+- Permission checks (RBAC)
+- Data loading states
+- Error states
+
+### SHOULD: Use Descriptive Test Names
+
+**Test names SHOULD describe behavior:**
+
+```tsx
+// ❌ WRONG - Vague
+test('button works', () => { ... });
+
+// ✅ CORRECT - Descriptive
+test('increments counter when increment button is clicked', () => { ... });
+test('displays error message when API call fails', () => { ... });
+```
+
+### SHOULD: Group Related Tests
+
+**SHOULD use `describe` blocks to group related tests:**
+
+```tsx
+describe('EventCard', () => {
+  describe('rendering', () => {
+    test('displays event title', () => { ... });
+    test('displays event date', () => { ... });
+  });
+  
+  describe('interactions', () => {
+    test('calls onEdit when edit button clicked', () => { ... });
+  });
+});
+```
+
+## Coverage Requirements
+
+**Note**: Coverage threshold enforcement is handled by CI/ESLint. See [8-testing-documentation-standards.md](../docs/standards/8-testing-documentation-standards.md) for complete coverage requirements.
+
+**MUST achieve:**
+- ≥90% coverage for utils & hooks
+- ≥70% coverage for components
+
+**MUST configure coverage under `test.coverage`** (Vitest reads it there, not at root). Use **`provider: 'istanbul'`** so only included source is in the report. Set `include` to the source you own; `exclude` test files, `dist/`, `scripts/`, tooling, `node_modules/`. Optionally in package.json: `"test:coverage": "vitest run --coverage --coverage.provider=istanbul"`. See Standard 8 for full example and thresholds (utils/hooks ≥90%, components ≥70%).
+
+## Documentation Requirements
+
+### MUST: Document Public APIs
+
+**MUST document all public functions, components, and hooks:**
+
+```tsx
+/**
+ * Fetches event data for a given event ID.
+ * 
+ * @param eventId - The unique identifier for the event
+ * @returns Event data or null if not found
+ * @throws {Error} If eventId is invalid
+ */
+export async function fetchEvent(eventId: string): Promise<Event | null> {
+  // Implementation
+}
+```
+
+### MUST: Include Usage Examples
+
+**MUST include usage examples in documentation:**
+
+```tsx
+/**
+ * Example usage:
+ * ```tsx
+ * const { event, isLoading } = useEventData('event-123');
+ * if (isLoading) return <Loading />;
+ * return <EventCard event={event} />;
+ * ```
+ */
+```
+
+### SHOULD: Document Complex Logic
+
+**SHOULD document complex logic and business rules:**
+
+```tsx
+// Calculate event duration, accounting for timezone differences
+// Events can span multiple days, so we need to handle day boundaries
+function calculateDuration(start: Date, end: Date): number {
+  // Implementation
+}
+```
+
+## Bug Reports & Feature Requests
+
+**Note**: Complete templates are in [8-testing-documentation-standards.md](../docs/standards/8-testing-documentation-standards.md). Use these patterns when creating issues.
+
+### Bug Report Checklist
+
+Before filing a bug report:
+- [ ] Issue hasn't been reported already
+- [ ] Using latest pace-core version
+- [ ] Issue is in pace-core (not your app)
+- [ ] Checked documentation
+- [ ] Have minimal reproduction
+- [ ] Included all required information
+
+### Feature Request Checklist
+
+Before filing a feature request:
+- [ ] Feature doesn't already exist
+- [ ] Checked if workaround exists
+- [ ] Clear problem statement
+- [ ] Proposed solution described
+- [ ] Real-world use case provided
+- [ ] Alternatives considered
+
+## Common Mistakes to Avoid
+
+**When writing tests, NEVER:**
+1. **Test implementation details** - Always test user behavior
+   ```tsx
+   // ❌ WRONG
+   test('calls setState', () => {
+     const component = render(<Counter />);
+     expect(component.state.count).toBe(0);
+   });
+   
+   // ✅ CORRECT
+   test('displays count and increments on button click', async () => {
+     const user = userEvent.setup();
+     render(<Counter />);
+     expect(screen.getByText('Count: 0')).toBeInTheDocument();
+     await user.click(screen.getByRole('button', { name: /increment/i }));
+     expect(screen.getByText('Count: 1')).toBeInTheDocument();
+   });
+   ```
+
+2. **Use getByTestId as first choice** - Always prefer accessible queries (getByRole, getByLabelText)
+3. **Skip timeouts** - Always include timeout parameters to prevent hanging
+4. **Place tests in separate directory** - Always colocate tests with source files
+5. **Use vague test names** - Always use descriptive names that explain behavior
+
+## Testing Checklist
+
+Before committing tests, verify:
+- [ ] Coverage meets requirements (≥90% utils, ≥70% components)
+- [ ] Using React Testing Library + userEvent
+- [ ] Tests are colocated with source files
+- [ ] Testing user behavior, not implementation
+- [ ] Using accessible queries (byRole, byLabelText)
+- [ ] Test names are descriptive
+- [ ] Related tests grouped with describe
+- [ ] No unnecessary mocks
+- [ ] Async code tested properly
+- [ ] Cleanup after tests
+- [ ] Timeout parameters included
+
+## Reference
+
+**Note**: Coverage threshold enforcement and detailed test configuration are handled by CI/ESLint. See [8-testing-documentation-standards.md](../docs/standards/8-testing-documentation-standards.md) for complete enforcement details.
+
+- React Testing Library: https://testing-library.com/react
+- Vitest: https://vitest.dev
+- Complete templates: [8-testing-documentation-standards.md](../docs/standards/8-testing-documentation-standards.md)

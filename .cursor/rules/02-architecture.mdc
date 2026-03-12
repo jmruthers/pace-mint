@@ -1,0 +1,340 @@
+---
+description: Enforce SOLID architecture principles, component design, and API design patterns
+globs: ["src/**/*.{ts,tsx}"]
+alwaysApply: false
+paceCoreVersion: "0.6.x"
+rulesVersion: "2025-01-28"
+---
+# Architecture Standards Guide
+
+**📚 Human-Readable Standard**: See [2-architecture-standards.md](../docs/standards/2-architecture-standards.md) for complete documentation.
+
+This guide enforces SOLID architecture principles, component design patterns, and API design patterns to ensure maintainable, extensible, and testable code.
+
+## AI Agent Instructions
+
+**When writing or modifying code, ALWAYS:**
+1. **Extract complex logic** - Move business logic out of components into hooks, services, or utilities
+2. **Use composition** - Extend functionality through composition, not modification of pace-core components
+3. **Keep components simple** - Components should only handle UI rendering, not data fetching or business logic
+4. **Use focused interfaces** - Create small, specific interfaces instead of large, generic ones
+5. **Depend on abstractions** - Use interfaces/types, not concrete implementations
+6. **Follow ApiResult pattern** - All RPCs must return ApiResult shape with proper error handling
+7. **When fixing architecture issues** - Use the **audit report** (`audit/<timestamp>-pace-core-audit.md`) and the **standard doc** section linked from the report; fix the cause, do not silence tools. Re-run **`npm run validate`** to confirm.
+8. **When the audit reports componentBoundary** - Fix the cause (e.g. extract data fetching to a hook, move business logic to a hook or utility, split large files or interfaces per SRP/ISP); do not silence or work around the finding. See Standard 3 "Component Design Principles / SOLID" and "How we check SOLID."
+
+**Decision Tree: Where should this logic live?**
+```
+1. What type of logic is this?
+   ├─ UI rendering → Component
+   ├─ Data fetching → Hook or service
+   ├─ Business logic → Hook, service, or utility
+   ├─ Formatting/transformation → Utility function
+   └─ Validation → Zod schema or utility
+
+2. Is this logic complex?
+   ├─ YES → Extract to hook/service/utility
+   └─ NO → Can stay in component if simple
+
+3. Does this modify pace-core behavior?
+   ├─ YES → Use composition (wrap pace-core component)
+   └─ NO → Continue
+```
+
+## Single Responsibility Principle (SRP)
+
+**A class or function SHOULD have only one reason to change.**
+
+### MUST: Single Responsibility
+
+**Each function/component SHOULD do one thing:**
+
+```tsx
+// ❌ WRONG: Multiple responsibilities (fetching, formatting, rendering in one component)
+function UserProfile({ userId }) {
+  const [user, setUser] = useState(null);
+  const [events, setEvents] = useState([]);
+  useEffect(() => { fetchUser(userId).then(setUser); fetchEvents(userId).then(setEvents); }, [userId]);
+  return <div>...</div>;
+}
+
+// ✅ CORRECT: Separated responsibilities (hooks for data, components for UI)
+function UserProfile({ userId }) {
+  const user = useUser(userId);
+  const events = useUserEvents(userId);
+  return <div><UserInfo user={user} /><UserEvents events={events} /></div>;
+}
+```
+
+### MUST: Extract Complex Logic
+
+**Complex logic SHOULD be extracted into hooks, services, or utilities:**
+
+```tsx
+// ❌ WRONG: Business logic in component (filtering, sorting, formatting)
+function EventList() {
+  const [events, setEvents] = useState([]);
+  const [filtered, setFiltered] = useState([]);
+  useEffect(() => { /* complex filtering/sorting logic */ }, [events]);
+  return <div>{filtered.map(...)}</div>;
+}
+
+// ✅ CORRECT: Logic extracted to hook
+function useFilteredEvents() {
+  const events = useEvents();
+  return useMemo(() => events.filter(...).sort(...).map(...), [events]);
+}
+function EventList() {
+  const filteredEvents = useFilteredEvents();
+  return <div>{filteredEvents.map(...)}</div>;
+}
+```
+
+## Open/Closed Principle (OCP)
+
+**Software entities SHOULD be open for extension but closed for modification.**
+
+### SHOULD: Use Composition Over Modification
+
+**Extend functionality through composition, not modification:**
+
+```tsx
+// ❌ WRONG: Modifying base component behavior
+function SpecialButton({ onClick, ...props }) {
+  const handleClick = (e) => { trackEvent('button-click'); onClick?.(e); };
+  return <BaseButton onClick={handleClick} {...props} />; // Modifies base
+}
+
+// ✅ CORRECT: Composition with pace-core (extend, don't modify)
+import { Button } from '@jmruthers/pace-core';
+function SpecialButton({ onClick, ...props }) {
+  const handleClick = (e) => { trackEvent('button-click'); onClick?.(e); };
+  return <Button onClick={handleClick} {...props} />;
+}
+```
+
+### SHOULD: Use Configuration Over Code Changes
+
+**Extend behavior through configuration:**
+
+```tsx
+// ✅ CORRECT: Extend through configuration, not code changes
+interface DataTableConfig { columns: Column[]; features: FeatureConfig; rbac: RBACConfig; }
+function MyDataTable({ config }: { config: DataTableConfig }) {
+  return <DataTable {...config} />;
+}
+```
+
+## Liskov Substitution Principle (LSP)
+
+**Subtypes MUST be substitutable for their base types.**
+
+### MUST: Maintain Interface Contracts
+
+**Derived components/hooks MUST maintain the same interface:**
+
+```tsx
+// ✅ CORRECT: Derived hooks maintain same interface (substitutable)
+interface BaseHook { data: Data | null; isLoading: boolean; error: Error | null; }
+function useBaseData(): BaseHook { ... }
+function useExtendedData(): BaseHook {
+  const base = useBaseData();
+  return { ...base }; // Maintains interface, extends behavior
+}
+```
+
+## Interface Segregation Principle (ISP)
+
+**Clients SHOULD NOT depend on interfaces they don't use.**
+
+### MUST: Create Focused Interfaces
+
+**Interfaces SHOULD be small and focused:**
+
+```tsx
+// ❌ WRONG: Large interface with many responsibilities
+interface UserService {
+  getUser(id: string): Promise<User>;
+  createUser(data: UserData): Promise<User>;
+  updateUser(id: string, data: Partial<User>): Promise<User>;
+  deleteUser(id: string): Promise<void>;
+  getUserEvents(id: string): Promise<Event[]>;
+  getUserOrganisations(id: string): Promise<Organisation[]>;
+}
+
+// ✅ CORRECT: Segregated interfaces (focused, specific)
+interface UserReader { getUser(id: string): Promise<User>; getUserEvents(id: string): Promise<Event[]>; }
+interface UserWriter { createUser(data: UserData): Promise<User>; updateUser(id: string, data: Partial<User>): Promise<User>; deleteUser(id: string): Promise<void>; }
+interface UserOrganisationService { getUserOrganisations(id: string): Promise<Organisation[]>; }
+```
+
+### SHOULD: Use Specific Props
+
+**Component props SHOULD be specific, not generic:**
+
+```tsx
+// ❌ WRONG: Generic props object (config: any)
+function UserCard({ user, config }: { user: User; config: any }) { ... }
+
+// ✅ CORRECT: Specific, focused props interface
+interface UserCardProps { user: User; showEmail?: boolean; showAvatar?: boolean; onEdit?: (user: User) => void; }
+function UserCard({ user, showEmail, showAvatar, onEdit }: UserCardProps) { ... }
+```
+
+## Dependency Inversion Principle (DIP)
+
+**High-level modules SHOULD NOT depend on low-level modules. Both SHOULD depend on abstractions.**
+
+### MUST: Depend on Abstractions
+
+**Depend on interfaces/types, not concrete implementations:**
+
+```tsx
+// ❌ WRONG: Direct dependency on implementation (tight coupling)
+function UserService() {
+  const supabase = useSecureSupabase();
+  async function getUser(id: string) {
+    const { data } = await supabase.from('users').select('*').eq('id', id).single();
+    return data;
+  }
+  return { getUser };
+}
+
+// ✅ CORRECT: Abstracted interface (depend on abstraction)
+interface UserRepository { getUser(id: string): Promise<User | null>; }
+function createUserRepository(supabase: SupabaseClient): UserRepository {
+  return { async getUser(id: string) { /* implementation */ } };
+}
+function useUserService() {
+  const supabase = useSecureSupabase();
+  const repository = useMemo(() => createUserRepository(supabase), [supabase]);
+  return { getUser: repository.getUser };
+}
+```
+
+### SHOULD: Use Dependency Injection
+
+**Inject dependencies rather than creating them:**
+
+```tsx
+// ❌ WRONG: Hard-coded dependency
+function EventService() { const api = new ApiClient('https://api.example.com'); }
+
+// ✅ CORRECT: Injected dependency (dependency injection)
+function EventService(api: ApiClient) { ... }
+// Or with React context: const api = useApiClient(); useMemo(() => new EventService(api), [api]);
+```
+
+## SOLID Checklist
+
+Before committing code, verify:
+- [ ] Each function/component has single responsibility
+- [ ] Complex logic extracted to hooks/services
+- [ ] Extension through composition, not modification
+- [ ] Interfaces are focused and specific
+- [ ] Dependencies are abstracted
+- [ ] No god objects or bloated components
+- [ ] Code is testable and maintainable
+
+## Common Mistakes to Avoid
+
+**When writing code, NEVER:**
+1. **Create god objects** - Components/classes that do too much
+   ```tsx
+   // ❌ WRONG: Component does everything
+   function UserDashboard({ userId }) {
+     const [user, setUser] = useState(null);
+     const [events, setEvents] = useState([]);
+     const [organisations, setOrganisations] = useState([]);
+     // 400+ lines of logic...
+   }
+   
+   // ✅ CORRECT: Separated concerns
+   function UserDashboard({ userId }) {
+     const user = useUser(userId);
+     const events = useUserEvents(userId);
+     const organisations = useUserOrganisations(userId);
+     return <DashboardContent user={user} events={events} organisations={organisations} />;
+   }
+   ```
+
+2. **Put business logic in components** - Extract to hooks/services
+3. **Create large interfaces** - Use focused, specific interfaces
+4. **Depend on concrete implementations** - Use abstractions (interfaces/types)
+5. **Modify pace-core components** - Use composition instead
+6. **Use boolean flags for states** - Use discriminated unions
+
+## API Design Patterns
+
+### MUST: Follow API Design Principles
+
+**APIs MUST be:**
+- Intuitive and consistent
+- Extensible without breaking changes
+- Clear about errors and edge cases
+
+### MUST: Use ApiResult Pattern
+
+**All RPCs MUST return ApiResult shape:**
+
+```typescript
+type ApiResult<T> = { ok: true; data: T } | { ok: false; error: ApiError };
+type ApiError = { code: string; message: string; details?: object };
+```
+
+```tsx
+// ✅ CORRECT: RPC returns ApiResult
+const result = await supabase.rpc('app_events_create', { name, date });
+if (!result.ok) {
+  // Handle error
+  return { ok: false, error: result.error };
+}
+return { ok: true, data: result.data };
+```
+
+### SHOULD: Make Write RPCs Idempotent
+
+**Write RPCs SHOULD be idempotent when possible:**
+
+```sql
+-- ✅ CORRECT: Idempotent create (ON CONFLICT DO NOTHING)
+INSERT INTO events (id, name, date)
+VALUES (p_event_id, p_name, p_date)
+ON CONFLICT (id) DO NOTHING;
+```
+
+## Component Design Patterns
+
+### MUST: Follow Component Principles
+
+**Components MUST:**
+- Be stateless when possible
+- Use composable structure
+- Be accessible by default
+- Be fully typed
+- Have small surface area
+
+### MUST NOT: Add Domain Logic to Components
+
+**Components MUST NOT:**
+- Include domain-specific logic
+- Fetch data directly (use hooks/services)
+- Include business workflows
+
+### MUST: Ensure Accessibility
+
+**Components MUST:**
+- Be keyboard operable
+- Have correct ARIA roles
+- Have visible focus states
+- Avoid inaccessible interactions
+
+## Reference
+
+**Note**: RLS policy validation is handled by the audit tool. See [2-architecture-standards.md](../docs/standards/2-architecture-standards.md) for complete enforcement details.
+
+- Single Responsibility: Each module has one reason to change
+- Open/Closed: Open for extension, closed for modification
+- Liskov Substitution: Subtypes must be substitutable
+- Interface Segregation: Many specific interfaces, not one general
+- Dependency Inversion: Depend on abstractions, not concretions

@@ -1,0 +1,156 @@
+---
+description: Overview of the pace-core standards system and the four layers of quality enforcement
+globs: ["**/*.{ts,tsx,js,jsx,md,mdx}"]
+alwaysApply: true
+paceCoreVersion: "0.6.x"
+rulesVersion: "2025-01-28"
+---
+# Standards Overview
+
+**📚 Human-Readable Standard**: See [0-standards-overview.md](../../packages/core/docs/standards/0-standards-overview.md) for complete documentation.
+
+This is the entry point to the pace-core standards system. It explains how the four layers of quality enforcement work together and how cursor rules fit into the system.
+
+## AI Agent Instructions
+
+**When writing or modifying code, ALWAYS:**
+1. **Start here** - Read this overview to understand the system
+2. **Use the right rule** - Check the Quick Reference below to find the relevant rule(s)
+3. **Follow decision trees** - Each rule includes decision trees to guide your choices
+4. **Check examples** - Every rule includes ❌ WRONG / ✅ CORRECT examples
+5. **Reference standards** - When in doubt, check the linked standards document
+6. **Focus on patterns** - These rules guide patterns, not mechanical checks (ESLint handles those)
+
+## The Four Layers of Quality Enforcement
+
+The pace-suite uses **four complementary quality layers**, each with a distinct responsibility:
+
+### 1. Standards Documents (Source of Truth)
+- Human-readable `.md` documents
+- Define *what "good" looks like*
+- **If there is a conflict, the standards win.**
+
+### 2. Cursor Rules (Real-time Guidance) ← **You are here**
+- AI-optimised interpretations of the standards
+- Applied while code is being written or modified
+- Prevent mistakes *before* they land
+- **Translate standards into behaviour**, but do not redefine them
+
+### 3. ESLint (Fast, Local Static Analysis)
+- Deterministic, file-level static analysis
+- Catches obvious issues early (types, hooks, imports, patterns)
+- Enforces *how code is written*, not *whether the system is correct*
+
+### 4. Audit Tool (Deep, System-Level Analysis)
+- Operates across files, folders, and systems
+- Validates architectural compliance (RBAC, data access, boundaries)
+- Answers: *"Is this system actually compliant?"*
+
+## How the Layers Work Together
+
+| Layer        | Strength                         | Timing          |
+|--------------|----------------------------------|-----------------|
+| Standards    | Intent & clarity                 | Design time     |
+| Cursor rules | Preventive guidance              | Write time      |
+| ESLint       | Fast mechanical enforcement      | Dev / CI        |
+| Audit tool   | Deep architectural verification  | Review / CI     |
+
+**No single layer is sufficient on its own.** Together, they create a repeatable, scalable quality system.
+
+## Standards File Mapping (SDLC order)
+
+The standards are organized into 10 files in SDLC order, each with a corresponding cursor rule:
+
+| File | Standard | Cursor Rule |
+|------|----------|-------------|
+| `0-standards-overview.md` | Overview | `00-standards-overview.mdc` |
+| `1-project-structure-standards.md` | Project Structure | `01-project-structure.mdc` |
+| `2-architecture-standards.md` | Architecture | `02-architecture.mdc` |
+| `3-security-rbac-standards.md` | Security & RBAC | `03-security-rbac.mdc` |
+| `4-api-tech-stack-standards.md` | API & Tech Stack | `04-api-tech-stack.mdc` |
+| `5-pace-core-compliance-standards.md` | pace-core Compliance | `05-pace-core-compliance.mdc` |
+| `6-code-quality-standards.md` | Code Quality | `06-code-quality.mdc` |
+| `7-styling-standards.md` | Styling | `07-styling.mdc` |
+| `8-testing-documentation-standards.md` | Testing & Documentation | `08-testing-documentation.mdc` |
+| `9-operations-standards.md` | Operations | `09-operations.mdc` |
+
+## Precedence Order
+
+When standards conflict, apply this precedence order:
+
+1. **Security** - Security and RBAC standards take highest priority
+2. **API/RPC** - API contracts and RPC standards
+3. **Components & Markup** - Component usage and markup quality
+4. **Code Quality/Style** - TypeScript, naming, code style
+5. **Testing & Documentation** - Testing and documentation requirements
+6. **Consuming App Structure** - Project structure and organization
+
+**Example:** If a component pattern conflicts with a security requirement, security wins.
+
+## Quick Reference Guide
+
+**New to pace-core?** Start here:
+1. Read [Standards Overview](../docs/standards/0-standards-overview.md) (this file) - Understand the system
+2. Read [Styling Standards](../docs/standards/7-styling-standards.md) - **CRITICAL:** Required CSS setup
+3. Read [pace-core Compliance](../docs/standards/5-pace-core-compliance-standards.md) - How to use pace-core
+4. Read [Project Structure](../docs/standards/1-project-structure-standards.md) - Organize your code
+
+**Common Tasks:**
+- **Setting up a new app?** → [Project Structure](../docs/standards/1-project-structure-standards.md) + [Styling Standards](../docs/standards/7-styling-standards.md)
+- **Writing components?** → [Architecture](../docs/standards/2-architecture-standards.md) + [Code Quality](../docs/standards/6-code-quality-standards.md)
+- **Working with RBAC?** → [Security & RBAC](../docs/standards/3-security-rbac-standards.md)
+- **Creating APIs/RPCs?** → [API & Tech Stack](../docs/standards/4-api-tech-stack-standards.md)
+- **Handling errors?** → [Operations](../docs/standards/9-operations-standards.md)
+- **Writing tests?** → [Testing & Documentation](../docs/standards/8-testing-documentation-standards.md)
+
+## Key Principles
+
+- **Do not silence tools** — fix the underlying issue
+- **Do not duplicate rules** — each layer has a purpose
+- **Do not diverge silently** — document exceptions explicitly
+- **Standards always win** — tools must align to them
+
+## What Cursor Rules Do
+
+Cursor rules provide **real-time guidance** during code writing:
+
+✅ **DO:**
+- Steer AI agents toward correct patterns
+- Enforce architectural intent during development
+- Reduce rework later in linting or audits
+- Translate standards into actionable behavior
+
+❌ **DON'T:**
+- Replace lint or audits
+- Invent new standards
+- Silence problems "to move on"
+- Enforce mechanical checks (ESLint handles this)
+- Validate system-level compliance (audit tool handles this)
+
+## Quick Reference: Which Rule to Use?
+
+**When writing code, use these rules:**
+
+- **Creating components?** → `05-pace-core-compliance.mdc` + `02-architecture.mdc` + `07-styling.mdc`
+- **Writing hooks or utilities?** → `05-pace-core-compliance.mdc` + `02-architecture.mdc` + `06-code-quality.mdc`
+- **Setting up providers or auth?** → `05-pace-core-compliance.mdc` + `03-security-rbac.mdc`
+- **Creating RPCs or APIs?** → `04-api-tech-stack.mdc` + `03-security-rbac.mdc`
+- **Writing tests?** → `08-testing-documentation.mdc`
+- **Handling errors?** → `09-operations.mdc`
+- **Optimizing performance?** → `09-operations.mdc` + `06-code-quality.mdc`
+- **Organizing files?** → `01-project-structure.mdc`
+- **Styling components?** → `07-styling.mdc` (ALWAYS APPLIED)
+- **Working with RBAC?** → `03-security-rbac.mdc`
+
+## Related Documentation
+
+- [Standards Overview](../docs/standards/0-standards-overview.md) - Complete standards system documentation
+- [Project Structure](../docs/standards/1-project-structure-standards.md) - Project structure and organization
+- [Architecture](../docs/standards/2-architecture-standards.md) - SOLID architecture principles
+- [Security & RBAC](../docs/standards/3-security-rbac-standards.md) - RBAC and RLS standards
+- [API & Tech Stack](../docs/standards/4-api-tech-stack-standards.md) - Tech stack and API/RPC standards
+- [pace-core Compliance](../docs/standards/5-pace-core-compliance-standards.md) - pace-core usage patterns
+- [Code Quality](../docs/standards/6-code-quality-standards.md) - Code quality and TypeScript standards
+- [Styling](../docs/standards/7-styling-standards.md) - Markup and styling standards
+- [Testing & Documentation](../docs/standards/8-testing-documentation-standards.md) - Testing and documentation standards
+- [Operations](../docs/standards/9-operations-standards.md) - Error handling, performance, and CI/CD

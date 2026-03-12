@@ -1,0 +1,366 @@
+---
+description: Enforce error handling patterns, performance optimization, and CI/CD integration patterns
+globs: ["src/**/*.{ts,tsx,js,jsx}", "supabase/migrations/**/*.sql", ".github/workflows/**/*.{yml,yaml}", "package.json"]
+alwaysApply: false
+paceCoreVersion: "0.6.x"
+rulesVersion: "2025-01-28"
+---
+# Operations Standards Guide
+
+**📚 Human-Readable Standard**: See [9-operations-standards.md](../docs/standards/9-operations-standards.md) for complete documentation.
+
+This guide enforces error handling patterns, performance optimization strategies, and CI/CD integration patterns.
+
+## AI Agent Instructions
+
+**When writing or modifying code, ALWAYS:**
+1. **Use type-safe errors** - Never use `any` for errors, always use type guards or Result types
+2. **Never expose internals** - User-facing errors must be friendly, never show SQL, stack traces, or file paths
+3. **Log with context** - Always log errors with context, but never log sensitive data (passwords, tokens, PII)
+4. **Memoize expensive operations** - Use `useMemo` for expensive computations, `useCallback` for stable references
+5. **Avoid new objects in render** - Never create new objects/arrays in render, memoize them with `useMemo`
+6. **Use helper functions in RLS** - Always use STABLE SECURITY DEFINER helper functions, never subqueries
+7. **Provide recovery paths** - When possible, provide retry logic or fallback values
+8. **When fixing operations or error-handling issues** - Use the **audit report** (`audit/<timestamp>-pace-core-audit.md`) and the **standard doc** section linked from the report; fix the cause (e.g. ApiResult usage, CI/CD setup, ErrorBoundary), do not silence tools. Re-run **`npm run validate`** to confirm.
+
+**Decision Tree: Error Handling**
+```
+1. What type of error is this?
+   ├─ API Error → Use ApiResult shape, user-friendly message
+   ├─ Validation Error → Use Zod errors, field-specific messages
+   ├─ Network Error → Retry logic, connection message
+   └─ Unknown Error → Generic user message, detailed log
+
+2. Should user see this error?
+   ├─ YES → User-friendly message (no internals)
+   └─ NO → Log only, show generic message
+
+3. Can we recover?
+   ├─ YES → Retry logic or fallback value
+   └─ NO → Show error, allow user to retry
+```
+
+**Decision Tree: Performance**
+```
+1. Is this expensive computation?
+   ├─ YES → Use useMemo
+   └─ NO → Don't memoize (overhead not worth it)
+
+2. Is this function passed as prop?
+   ├─ YES → Use useCallback
+   └─ NO → Regular function is fine
+
+3. Is this creating new object/array in render?
+   ├─ YES → Memoize with useMemo
+   └─ NO → Continue
+```
+
+## Error Handling Patterns
+
+### MUST: Use Type-Safe Error Handling
+
+**MUST use type guards or Result types, NEVER use `any`:**
+
+```tsx
+// ❌ WRONG: Using any
+catch (error: any) {
+  console.log(error.message);
+}
+
+// ✅ CORRECT: Type guard
+function isApiError(error: unknown): error is ApiError {
+  return typeof error === 'object' && error !== null && 'ok' in error && (error as ApiError).ok === false;
+}
+catch (error) {
+  if (isApiError(error)) {
+    handleApiError(error);
+  } else {
+    handleUnknownError(error);
+  }
+}
+
+// ✅ CORRECT: Result type
+type Result<T> = { ok: true; data: T } | { ok: false; error: ApiError };
+const result = await fetchData();
+if (result.ok) {
+  useData(result.data);
+} else {
+  showError(result.error.message);
+}
+```
+
+### MUST: Never Expose Internal Details
+
+**MUST NOT expose SQL, stack traces, file paths, or internal errors to users:**
+
+```tsx
+// ❌ WRONG: Exposing internal details
+toast.error(error.message); // May contain SQL, stack traces
+
+// ✅ CORRECT: User-friendly message
+toast.error('Unable to save changes. Please try again.');
+logger.error('Save failed', { error: error.message, context: 'saveUser' });
+```
+
+### MUST: Use Consistent Error Shapes
+
+**MUST use ApiResult shape for API errors:**
+
+```tsx
+// ✅ CORRECT: Consistent error shape
+type ApiError = {
+  ok: false;
+  error: {
+    code: string;
+    message: string; // User-friendly
+    details?: object; // Non-sensitive context
+  };
+};
+```
+
+### MUST: Log Errors with Context
+
+**MUST log errors with context, but NEVER log sensitive data:**
+
+```tsx
+// ✅ CORRECT: Log with context, no sensitive data
+logger.error('Failed to save user', {
+  userId: user.id,
+  operation: 'updateUser',
+  errorCode: error.code,
+});
+
+// ❌ WRONG: Logging sensitive data
+logger.error('Failed to save user', {
+  password: user.password, // NEVER
+  token: authToken,        // NEVER
+});
+```
+
+### SHOULD: Provide Recovery Paths
+
+**SHOULD provide retry logic or fallback values when appropriate:**
+
+```tsx
+// ✅ CORRECT: Retry with exponential backoff
+async function fetchWithRetry<T>(fn: () => Promise<Result<T>>, maxRetries = 3): Promise<Result<T>> {
+  for (let attempt = 0; attempt < maxRetries; attempt++) {
+    const result = await fn();
+    if (result.ok) return result;
+    if (result.error.code?.startsWith('4')) return result; // Don't retry 4xx
+    await new Promise(resolve => setTimeout(resolve, Math.pow(2, attempt) * 1000));
+  }
+  return { ok: false, error: { code: 'MAX_RETRIES', message: 'Operation failed after retries' } };
+}
+```
+
+## Performance Optimization Patterns
+
+### MUST: Optimize React Re-renders
+
+**MUST use memoization for expensive computations and stable references:**
+
+```tsx
+// ✅ CORRECT - Memoize expensive computation
+const expensiveValue = useMemo(() => computeExpensiveValue(data), [data]);
+
+// ✅ CORRECT - Stable callback reference
+const handleClick = useCallback(() => doSomething(id), [id]);
+
+// ✅ CORRECT - Memoize component
+const ExpensiveComponent = React.memo(({ data }) => <div>{/* ... */}</div>);
+```
+
+### MUST: Avoid Creating New Objects in Render
+
+**MUST NOT create new objects/arrays in render:**
+
+```tsx
+// ❌ WRONG - New object on every render
+function Component({ items }) {
+  const config = { items, enabled: true };
+  return <Child config={config} />;
+}
+
+// ✅ CORRECT - Memoize object
+function Component({ items }) {
+  const config = useMemo(() => ({ items, enabled: true }), [items]);
+  return <Child config={config} />;
+}
+```
+
+### MUST: Use Helper Functions in RLS Policies
+
+**MUST use STABLE SECURITY DEFINER helper functions (never subqueries):**
+
+```sql
+-- ✅ CORRECT - Helper function (evaluated once)
+CREATE POLICY "rbac_select_users" ON users FOR SELECT USING (
+  check_user_organisation_access(organisation_id)
+);
+
+-- ❌ WRONG - Subquery (N+1 performance issue)
+CREATE POLICY "rbac_select_users" ON users FOR SELECT USING (
+  organisation_id IN (SELECT organisation_id FROM organisation_memberships WHERE user_id = auth.uid())
+);
+```
+
+### SHOULD: Lazy Load Heavy Components
+
+**SHOULD lazy load heavy components:**
+
+```tsx
+// ✅ CORRECT - Lazy load
+import { lazy, Suspense } from 'react';
+const HeavyComponent = lazy(() => import('./HeavyComponent'));
+<Suspense fallback={<Loading />}><HeavyComponent /></Suspense>
+```
+
+### SHOULD: Configure TanStack Query Cache
+
+**SHOULD configure appropriate cache times:**
+
+```tsx
+// ✅ CORRECT - Configure cache
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      staleTime: 5 * 60 * 1000,
+      cacheTime: 10 * 60 * 1000,
+      retry: 1,
+      refetchOnWindowFocus: false,
+    },
+  },
+});
+```
+
+## CI/CD Integration Patterns
+
+### MUST: Include Required CI Checks
+
+**MUST run these checks in every CI pipeline:**
+
+```yaml
+# ✅ CORRECT - Required checks
+jobs:
+  quality-checks:
+    steps:
+      - name: Lint
+        run: npm run lint
+      - name: Type check
+        run: npx tsc --noEmit
+      - name: Run tests
+        run: npm run test
+      - name: Build
+        run: npm run build
+```
+
+### MUST: Have Required Scripts
+
+**MUST have these scripts in package.json:**
+
+```json
+// ✅ CORRECT - Required scripts
+{
+  "scripts": {
+    "lint": "eslint .",
+    "type-check": "tsc --noEmit",
+    "test": "vitest run",
+    "build": "vite build"
+  }
+}
+```
+
+### MUST: Use Secrets for Sensitive Data
+
+**MUST NOT commit secrets to repository:**
+
+```yaml
+# ✅ CORRECT - Use secrets
+env:
+  SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+  VITE_SUPABASE_PUBLISHABLE_KEY: ${{ secrets.VITE_SUPABASE_PUBLISHABLE_KEY }}
+
+# ❌ WRONG - Hardcoded secrets
+env:
+  SUPABASE_URL: "https://hardcoded-url.supabase.co"
+```
+
+### SHOULD: Deploy to Staging First
+
+**SHOULD deploy to staging before production:**
+
+```yaml
+# ✅ CORRECT - Staging first
+deploy-staging:
+  if: github.ref == 'refs/heads/develop'
+  environment: staging
+
+deploy-production:
+  needs: deploy-staging
+  if: github.ref == 'refs/heads/main'
+  environment: production
+```
+
+## Common Mistakes to Avoid
+
+**When writing code, NEVER:**
+1. **Use `any` for errors** - Always use type guards or Result types
+   ```tsx
+   // ❌ WRONG
+   catch (error: any) {
+     toast.error(error.message);
+   }
+   
+   // ✅ CORRECT
+   catch (error: unknown) {
+     if (isApiError(error)) {
+       toast.error(error.error.message);
+     } else {
+       toast.error('An unexpected error occurred');
+     }
+   }
+   ```
+
+2. **Expose internal details in errors** - Always use user-friendly messages
+3. **Create new objects in render** - Always memoize with useMemo
+4. **Skip memoization for expensive operations** - Always use useMemo/useCallback
+5. **Use subqueries in RLS policies** - Always use STABLE SECURITY DEFINER helper functions
+6. **Log sensitive data** - Never log passwords, tokens, or PII
+
+## Operations Checklist
+
+Before committing, verify:
+
+**Error Handling:**
+- [ ] Type-safe error handling (no `any`)
+- [ ] User-friendly error messages (no internals)
+- [ ] Errors logged with context (no sensitive data)
+- [ ] Recovery paths provided when possible
+- [ ] Consistent error shapes used
+
+**Performance:**
+- [ ] Expensive computations memoized
+- [ ] Callbacks stable with useCallback
+- [ ] Components memoized when appropriate
+- [ ] No new objects/arrays in render
+- [ ] Heavy components lazy loaded
+- [ ] RLS policies use helper functions
+- [ ] TanStack Query configured properly
+
+**CI/CD:**
+- [ ] Lint check configured
+- [ ] Type check configured
+- [ ] Tests run in CI
+- [ ] Build succeeds in CI
+- [ ] Environment variables set as secrets
+- [ ] Staging deployment configured
+- [ ] Production deployment configured
+
+## Reference
+
+**Note**: CI/CD configuration validation and performance metric thresholds are handled by CI/audit tool. See [9-operations-standards.md](../docs/standards/9-operations-standards.md) for complete enforcement details.
+
+- Error Handling: [9-operations-standards.md](../docs/standards/9-operations-standards.md#error-handling-patterns)
+- Performance: [9-operations-standards.md](../docs/standards/9-operations-standards.md#performance-optimization)
+- CI/CD: [9-operations-standards.md](../docs/standards/9-operations-standards.md#cicd-integration)

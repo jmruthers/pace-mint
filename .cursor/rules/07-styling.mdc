@@ -1,0 +1,634 @@
+---
+description: Enforce clean markup standards, semantic HTML usage, and pace-core component patterns
+globs: ["src/**/*.{ts,tsx,js,jsx}"]
+alwaysApply: true
+paceCoreVersion: "0.6.x"
+rulesVersion: "2025-01-28"
+---
+# Markup Quality Guide
+
+**📚 Human-Readable Standard**: See [7-styling-standards.md](../../../docs/standards/7-styling-standards.md) for complete documentation including **CRITICAL CSS configuration requirements**.
+
+**⚠️ IMPORTANT**: This rule is ALWAYS APPLIED. The standard includes required CSS setup that MUST be followed for pace-core components to render correctly.
+
+## AI Agent Instructions
+
+**When writing or modifying code, ALWAYS:**
+1. **Use pace-core components** - Never use native HTML elements when pace-core provides components
+2. **Use semantic HTML** - Always use semantic elements (`<main>`, `<section>`, `<article>`, etc.) instead of `<div>` wrappers
+3. **Never use inline styles** - Never use `style={{...}}`, always use pace-core components or Tailwind classes
+4. **Use Grid for layout** - Prefer CSS Grid over Flexbox for centering, two-dimensional layouts, and full-page layouts
+5. **Minimize elements** - Use the fewest elements possible, prefer React Fragments over wrapper divs
+6. **Check CSS setup** - Before using pace-core components, verify CSS is configured correctly (see checklist below)
+7. **When fixing styling or markup issues** - Use the **audit report** (`audit/<timestamp>-pace-core-audit.md`) and the **standard doc** section linked from the report; fix the cause (e.g. app.css, @source, @theme), do not silence tools. Re-run **`npm run validate`** to confirm.
+
+**Decision Tree: Markup & Styling**
+```
+1. What element should I use?
+   ├─ Button → <Button> from pace-core (not <button>)
+   ├─ Input → <Input> from pace-core (not <input>)
+   ├─ Page wrapper → <main> (not <div>)
+   ├─ Section → <section> (not <div>)
+   ├─ Article → <article> (not <div>)
+   └─ Navigation → <nav> (not <div>)
+
+2. Do I need a wrapper?
+   ├─ For React single root → Use Fragment (<>...</>)
+   ├─ For styling only → Apply to existing semantic parent
+   └─ For layout → Use Grid (grid place-items-center, grid grid-cols-*)
+
+3. How do I center content?
+   ├─ Both axes → grid place-items-center
+   └─ Single axis → flex (but prefer grid)
+
+4. Am I using inline styles?
+   ├─ YES → WRONG - Use pace-core component or Tailwind class
+   └─ NO → Continue
+```
+
+## ⚠️ CRITICAL: CSS Configuration Required
+
+**Before using pace-core components, you MUST configure CSS correctly.** Without proper configuration, pace-core components will appear unstyled or with incorrect styling.
+
+**MUST read the standard for complete CSS setup instructions**: [7-styling-standards.md](../../../docs/standards/7-styling-standards.md)
+
+**Quick checklist:**
+- [ ] `src/app.css` exists with `@import "tailwindcss";`
+- [ ] `@source` directives configured correctly (relative to CSS file location)
+- [ ] `@import "@jmruthers/pace-core/styles/core.css";` in `app.css`
+- [ ] All three color palettes defined (main, sec, acc) with all shades (50-950)
+- [ ] `app.css` imported in `main.tsx` (NOT `core.css` directly)
+
+**See the standard for detailed setup instructions and troubleshooting.**
+
+---
+
+## Color Palettes: main, sec, acc Only
+
+**pace-core and all pace apps MUST use only the custom design-system palettes (`main`, `sec`, `acc`). NEVER use standard Tailwind/named colors (e.g. red, blue, gray, green, orange, etc.) in class names, CSS variables, or documentation examples.**
+
+Do not define or reference CSS variables like `--color-red-500`, `--color-blue-200`, `--color-gray-500`; use `--color-main-*`, `--color-sec-*`, `--color-acc-*` only.
+
+### Color mapping (standard Tailwind to design system)
+
+When converting or writing styles, use this mapping:
+
+| Standard / Tailwind | Use palette |
+|--------------------|-------------|
+| red, orange, amber, yellow, lime, pink, rose | **acc-** |
+| green, emerald, teal, cyan, sky, blue | **main-** |
+| indigo, violet, purple, fuchsia, slate, gray, zinc, neutral, stone | **sec-** |
+| white | **main-50** |
+| black | **main-950** |
+
+### Transformation rules
+
+- Replace `bg-{standard}-{shade}` with `bg-{palette}-{shade}` (e.g. `bg-main-500`, `bg-sec-200`, `bg-acc-400`).
+- Same for `text-*`, `border-*`, `ring-*`, `outline-*`, `from-*` / `via-*` / `to-*` (gradients), `fill-*`, `stroke-*`.
+- Preserve shade numbers (50, 100, …, 950).
+- Do not change semantic Tailwind classes (e.g. `bg-background`, `text-foreground`) that are mapped in app CSS.
+- Do not create or reference new CSS variables; use existing theme tokens only.
+
+### Examples
+
+- `bg-main-500`, `text-acc-100`, `border-sec-700`, `ring-acc-400` are correct.
+- Any class using standard Tailwind color names is wrong; use the mapped palette (main/sec/acc) instead.
+
+---
+
+This guide enforces clean markup standards, semantic HTML usage, and proper pace-core component patterns to ensure maintainable, accessible, and consistent code.
+
+## pace-core First
+
+### MUST: Use pace-core Components
+
+**MUST use pace-core components wherever possible:**
+
+```tsx
+// ❌ WRONG: Custom button or native HTML element
+<button className="btn-primary" onClick={handleClick}>
+  Click me
+</button>
+<input 
+  type="text" 
+  className="form-input" 
+  value={value}
+  onChange={handleChange}
+/>
+
+// ✅ CORRECT: Use pace-core components
+import { Button, Input } from '@jmruthers/pace-core';
+<Button onClick={handleClick}>Click me</Button>
+<Input 
+  type="text" 
+  value={value}
+  onChange={handleChange}
+/>
+```
+
+### MUST NOT: Add Custom Styles to pace-core Components
+
+**NEVER add custom styles when pace-core components already provide styling. Assume these components already apply the correct layout, structure, and color styles. Use component variants/props instead.**
+
+```tsx
+// ❌ WRONG: Overriding pace-core component styles
+<Button className="custom-button-style">Click me</Button>
+<Card className="custom-card-layout">Content</Card>
+<Button className="text-acc-500 bg-main-200">Custom styled button</Button>
+<Input className="border-2 border-sec-500" />
+
+// ✅ CORRECT: Use pace-core component variants/props
+<Button variant="default">Click me</Button>
+<Card>Content</Card>
+<Button variant="destructive">Delete</Button>
+<Input type="text" />
+```
+
+**Exceptions:**
+- Only override styles when absolutely necessary and document why
+- Prefer using component props/variants over className overrides
+- If you must override, do it inside the component file, not at the call site
+
+### MUST: Rely on pace-core core.css
+
+**MUST rely on pace-core `core.css` for typography, spacing, and visual presentation:**
+
+```tsx
+// ❌ WRONG: Custom typography classes
+<h1 className="text-2xl font-bold">Title</h1>
+<p className="text-sec-500 mb-4">Description</p>
+
+// ✅ CORRECT: Typography defined in pace-core core.css
+<h1>Title</h1>
+<p>Description</p>
+```
+
+### SHOULD: Fall Back to Semantic HTML
+
+**SHOULD only use plain semantic HTML when no suitable pace-core component exists:**
+
+```tsx
+// ✅ CORRECT: Use semantic HTML when pace-core doesn't provide component
+<main>
+  <section>
+    <article>
+      <h2>Article Title</h2>
+      <p>Article content</p>
+    </article>
+  </section>
+</main>
+```
+
+## Semantic HTML Only
+
+### MUST: Use Semantic HTML Elements
+
+**MUST use semantic HTML elements for their intended purpose:**
+
+```tsx
+// ❌ WRONG: Non-semantic elements
+<div onClick={handleClick}>Click me</div>
+<div className="header">Header</div>
+<div className="footer">Footer</div>
+
+// ✅ CORRECT: Semantic HTML elements
+<button onClick={handleClick}>Click me</button>
+<header>Header</header>
+<footer>Footer</footer>
+```
+
+### MUST: Prefer Semantic HTML (Limit `<div>`)
+
+**ALWAYS prefer semantic HTML elements** (`<main>`, `<section>`, `<article>`, `<header>`, `<footer>`, `<nav>`, `<h1>`, `<h2>`, `<h3>`, `<h4>`, `<h5>`, `<h6>`, `<p>`, `<ul>`, `<ol>`, `<li>`, `<a>`, `<strong>`, `<em>`, `<u>`, `<pre>`, `<code>`, `<blockquote>`, `<hr>`, `<small>`, etc.) instead of styling-focused `<div>` or `<span>` wrappers.
+
+**Note:** `<img>` elements can remain as-is; do not convert to `<figure>` elements. These semantic elements already have their styling defined in `core.css`.
+
+Using semantic elements improves accessibility, maintainability, and consistency.
+
+#### `<div>` usage policy
+
+- **MUST NOT** use `<div>` when a clear semantic element exists.
+- `<div>` is **allowed only** for:
+  - purely presentational layout wrappers (flex/grid grouping) when no semantic element fits, OR
+  - React portal roots / app shell roots, OR
+  - third-party libraries that require specific DOM structure (document the reason in a short comment).
+
+#### Severity guidance (for audits)
+
+- **HIGH/BLOCKER**: `<div>` used in place of landmark/semantic structure (e.g., main page wrapper that should be `<main>`, navigation that should be `<nav>`, lists that should be `<ul>/<ol>`, headings that should be `<h1>`-`<h6>`, paragraphs that should be `<p>`).
+- **MEDIUM**: `<div>` used as a generic wrapper inside semantic structure where it could be a fragment or semantic element.
+- **LOW**: `<div>` used for unavoidable third-party structure with a comment justifying it.
+
+**Examples:**
+
+```tsx
+// ❌ WRONG: Non-semantic page structure
+<div className="page">
+  <div className="nav">...</div>
+  <div className="content">...</div>
+  <div className="heading">Title</div>
+  <div className="text">Paragraph text</div>
+  <div className="list">
+    <div className="item">Item 1</div>
+    <div className="item">Item 2</div>
+  </div>
+</div>
+
+// ✅ CORRECT: Semantic structure
+<main>
+  <nav>...</nav>
+  <section>
+    <h1>Title</h1>
+    <p>Paragraph text</p>
+    <ul>
+      <li>Item 1</li>
+      <li>Item 2</li>
+    </ul>
+  </section>
+</main>
+
+// ✅ ACCEPTABLE: Layout-only wrapper (no semantic fit)
+// (Prefer fragments where possible)
+<section>
+  <div className="flex gap-2">...</div>
+</section>
+```
+
+## Typography & Styling
+
+### MUST NOT: Apply Typography Styles Directly
+
+**MUST NOT apply typography styles directly to elements. All typography for semantic elements (`body`, `h1`, `h2`, `h3`, `h4`, `h5`, `h6`, `p`, `a`, `strong`, `em`, `u`, `pre`, `code`, `blockquote`, `hr`, `small`, `ul`, `ol`, `li`) is defined in `pace-core core.css`.**
+
+**Prohibited typography classes:**
+- `text-*` (e.g., `text-2xl`, `text-sm`, `text-base`)
+- `font-*` (e.g., `font-bold`, `font-semibold`, `font-normal`)
+- `leading-*` (e.g., `leading-relaxed`, `leading-tight`)
+- `tracking-*` (e.g., `tracking-wide`, `tracking-tighter`)
+- `uppercase`, `lowercase`, `capitalize`
+- Color classes on typography elements (use core.css; for layout color use main/sec/acc only, e.g. `text-main-600`)
+- Margin/padding classes used solely for text spacing (e.g., `mb-2`, `mt-4`, `pb-1`, `pt-3`) — unless clearly needed for layout structure
+
+```tsx
+// ❌ WRONG: Direct typography styling
+<h1 className="text-2xl font-bold">Title</h1>
+<p className="text-sec-500 leading-relaxed mb-4">Description</p>
+<label className="text-sm uppercase">Label</label>
+<a className="text-main-500">Link</a>
+<ul className="mb-4">List</ul>
+
+// ✅ CORRECT: Typography defined in pace-core core.css
+<h1>Title</h1>
+<p>Description</p>
+<label>Label</label>
+<a>Link</a>
+<ul>List</ul>
+```
+
+### MUST: Use pace-core Typography
+
+**MUST rely on typography defined exclusively in `pace-core core.css`:**
+
+```tsx
+// ✅ CORRECT: Typography comes from pace-core core.css
+<h1>Heading 1</h1>
+<h2>Heading 2</h2>
+<h3>Heading 3</h3>
+<h4>Heading 4</h4>
+<h5>Heading 5</h5>
+<h6>Heading 6</h6>
+<p>Paragraph text</p>
+<a>Link text</a>
+<strong>Bold text</strong>
+<em>Italic text</em>
+<u>Underlined text</u>
+<pre>Preformatted text</pre>
+<code>Code text</code>
+<blockquote>Quote text</blockquote>
+<hr />
+<small>Small text</small>
+<ul><li>List item</li></ul>
+<ol><li>Ordered item</li></ol>
+<label>Form label</label>
+```
+
+### MUST NOT: Add Typography Utilities
+
+**MUST NOT add utility classes, inline styles, or custom CSS for typography:**
+
+```tsx
+// ❌ WRONG: Typography utilities or inline styles
+<h1 className="text-3xl font-bold mb-4">Title</h1>
+<p style={{ fontSize: '14px', color: '...' }}>Text</p>
+<label className="uppercase tracking-wide">Label</label>
+<a className="text-primary hover:text-primary-600">Link</a>
+<ul className="mb-2 mt-4">List</ul>
+
+// ✅ CORRECT: No typography styling - pace-core handles it
+<h1>Title</h1>
+<p>Text</p>
+<label>Label</label>
+<a>Link</a>
+<ul>List</ul>
+```
+
+### MUST NOT: Use Margin/Padding for Text Spacing
+
+**MUST NOT use margin/padding classes (`mb-*`, `mt-*`, `pb-*`, `pt-*`, `mx-*`, `my-*`, `px-*`, `py-*`) solely for text spacing on typography elements. These are allowed only when clearly needed for layout structure:**
+
+```tsx
+// ❌ WRONG: Margin/padding for text spacing
+<p className="mb-4">Paragraph with bottom margin</p>
+<h2 className="mt-8 mb-2">Heading with margins</h2>
+<ul className="mb-4">List with bottom margin</ul>
+
+// ✅ CORRECT: No spacing classes - pace-core handles typography spacing
+<p>Paragraph</p>
+<h2>Heading</h2>
+<ul>List</ul>
+
+// ✅ ACCEPTABLE: Margin/padding for layout structure (not typography spacing)
+<section className="mb-8">
+  <h2>Section Title</h2>
+  <p>Content</p>
+</section>
+```
+
+## React Structure Rules
+
+### MUST NOT: Add Wrapper Elements for Single Root
+
+**MUST NOT add wrapper elements solely to satisfy React's single-root requirement:**
+
+```tsx
+// ❌ WRONG: Unnecessary wrapper for single root
+function Component() {
+  return (
+    <div>
+      <Header />
+      <Main />
+      <Footer />
+    </div>
+  );
+}
+
+// ✅ CORRECT: Use React Fragment
+function Component() {
+  return (
+    <>
+      <Header />
+      <Main />
+      <Footer />
+    </>
+  );
+}
+```
+
+### MUST: Use React Fragments
+
+**MUST use React Fragments for grouping without adding DOM elements:**
+
+```tsx
+// ✅ CORRECT: Use React Fragments
+function Component() {
+  return (
+    <>
+      <Component1 />
+      <Component2 />
+      <Component3 />
+    </>
+  );
+}
+```
+
+### MUST NOT: Add Extra Elements
+
+**MUST NOT introduce extra elements that provide no semantic or functional value:**
+
+```tsx
+// ❌ WRONG: Extra wrapper with no purpose
+<article>
+  <div>
+    <h2>Title</h2>
+    <p>Content</p>
+  </div>
+</article>
+
+// ✅ CORRECT: Direct semantic structure
+<article>
+  <h2>Title</h2>
+  <p>Content</p>
+</article>
+```
+
+## Styling & Layout Discipline
+
+### MUST NOT: Add Wrappers for Styling
+
+**MUST NOT add wrapper elements just to apply styles:**
+
+```tsx
+// ❌ WRONG: Wrapper element for styling only
+<div className="flex gap-4">
+  <Button>Button 1</Button>
+  <Button>Button 2</Button>
+</div>
+
+// ✅ CORRECT: Apply styles to existing parent or use pace-core components
+<section className="flex gap-4">
+  <Button>Button 1</Button>
+  <Button>Button 2</Button>
+</section>
+// Or if no semantic parent exists, leave unstyled or use pace-core layout components
+```
+
+### SHOULD: Apply Styles to Existing Elements
+
+**SHOULD apply styles to existing parent components:**
+
+```tsx
+// ✅ CORRECT: Apply styles to semantic parent
+<main className="flex flex-col gap-4">
+  <section>Content 1</section>
+  <section>Content 2</section>
+</main>
+```
+
+### SHOULD: Leave Unstyled When Appropriate
+
+**SHOULD leave elements unstyled if styles aren't necessary:**
+
+```tsx
+// ✅ CORRECT: Unstyled semantic structure
+<article>
+  <h2>Title</h2>
+  <p>Content</p>
+</article>
+```
+
+### MUST: Use pace-core for Layout
+
+**MUST assume most layout and styling will be handled by pace-core, not ad-hoc wrappers:**
+
+```tsx
+// ❌ WRONG: Custom layout wrapper
+<div className="grid grid-cols-2 gap-4">
+  <Card>Card 1</Card>
+  <Card>Card 2</Card>
+</div>
+
+// ✅ CORRECT: Use pace-core layout components or apply to semantic parent
+<section className="grid grid-cols-2 gap-4">
+  <Card>Card 1</Card>
+  <Card>Card 2</Card>
+</section>
+```
+
+## Element Minimisation
+
+### MUST: Use Fewest Elements Possible
+
+**MUST use the fewest elements possible to achieve the desired structure:**
+
+```tsx
+// ❌ WRONG: Unnecessary nesting
+<main>
+  <div>
+    <section>
+      <div>
+        <article>Content</article>
+      </div>
+    </section>
+  </div>
+</main>
+
+// ✅ CORRECT: Minimal structure
+<main>
+  <section>
+    <article>Content</article>
+  </section>
+</main>
+```
+
+### MUST NOT: Create Redundant Nesting
+
+**MUST NOT create redundant nesting:**
+
+```tsx
+// ❌ WRONG: Redundant wrapper
+<article>
+  <div>
+    <h2>Title</h2>
+  </div>
+  <div>
+    <p>Content</p>
+  </div>
+</article>
+
+// ✅ CORRECT: Direct structure
+<article>
+  <h2>Title</h2>
+  <p>Content</p>
+</article>
+```
+
+### MUST: Clear Semantic Purpose
+
+**MUST ensure every element has a clear semantic purpose:**
+
+```tsx
+// ❌ WRONG: Element without semantic purpose
+<div>
+  <Component1 />
+  <Component2 />
+</div>
+
+// ✅ CORRECT: Semantic purpose or Fragment
+<section>
+  <Component1 />
+  <Component2 />
+</section>
+// Or if no semantic grouping needed:
+<>
+  <Component1 />
+  <Component2 />
+</>
+```
+
+## Prohibited Patterns
+
+### MUST NOT: Use These Patterns
+
+**MUST NOT use the following patterns:**
+
+1. **`<div>` elements** - Use semantic HTML or React Fragments instead
+2. **Wrapper elements for styling only** - Apply styles to existing elements or use pace-core components
+3. **Wrapper elements as sole child** - Use React Fragments instead
+4. **Custom typography classes** - Typography is defined in pace-core core.css
+5. **Inline styles for typography** - Use pace-core typography
+6. **Duplicating pace-core layout/visuals** - Use pace-core components instead
+
+```tsx
+// ❌ WRONG: All prohibited patterns
+<div className="wrapper">
+  <div className="content">
+    <h1 className="text-2xl font-bold">Title</h1>
+    <p style={{ color: 'gray' }}>Text</p>
+  </div>
+</div>
+
+// ✅ CORRECT: Clean, semantic markup
+<main>
+  <section>
+    <h1>Title</h1>
+    <p>Text</p>
+  </section>
+</main>
+```
+
+## Expected Outcome
+
+### Code Quality Goals
+
+Code produced under these rules SHOULD:
+
+- **Be semantically correct** - Use appropriate HTML elements for their purpose
+- **Be visually consistent** - Rely on pace-core for styling and typography
+- **Contain minimal markup** - Use fewest elements necessary
+- **Avoid unnecessary abstraction** - No wrappers without purpose
+- **Remain easy to reason about** - Clear structure and purpose
+- **Be easy to refactor** - Minimal coupling and dependencies
+
+### Decision Tree
+
+**When in doubt, follow this decision tree:**
+
+1. **Does pace-core provide a component?** → Use pace-core component
+2. **Is a semantic HTML element appropriate?** → Use semantic element (`<main>`, `<section>`, `<article>`, etc.)
+3. **Do I need to group elements without semantic meaning?** → Use React Fragment (`<>...</>`)
+4. **Do I need styling?** → Apply to existing semantic parent or use pace-core layout components
+5. **Still unsure?** → Remove the element, remove the style, and rely on pace-core or semantic HTML
+
+## Markup Quality Checklist
+
+Before committing code, verify:
+
+- [ ] No `<div>` elements (except first child of `<body>` in `index.html`)
+- [ ] pace-core components used where available
+- [ ] Semantic HTML elements used appropriately
+- [ ] No typography styling applied directly
+- [ ] No wrapper elements for styling only
+- [ ] React Fragments used instead of unnecessary wrappers
+- [ ] Minimal element nesting
+- [ ] Every element has clear semantic purpose
+- [ ] No custom styles overriding pace-core components
+- [ ] Layout handled by pace-core or semantic parents
+- [ ] Code is semantically correct and accessible
+
+## Reference
+
+- **pace-core Components**: See [01-pace-core-compliance.mdc](./01-pace-core-compliance.mdc) for component usage
+- **Semantic HTML**: https://developer.mozilla.org/en-US/docs/Glossary/Semantics
+- **React Fragments**: https://react.dev/reference/react/Fragment
+- **Accessibility**: See [04-code-quality.mdc](./04-code-quality.mdc) for accessibility requirements
+- **When in doubt**: Remove the element, remove the style, and rely on pace-core or semantic HTML

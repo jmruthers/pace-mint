@@ -1,0 +1,378 @@
+---
+description: Enforce tech stack compliance, API/RPC naming conventions, and Vite configuration patterns
+globs: ["src/**/*.{ts,tsx,js,jsx,css}", "*.config.{ts,js}", "supabase/migrations/**/*.sql"]
+alwaysApply: false
+paceCoreVersion: "0.6.x"
+rulesVersion: "2025-01-28"
+---
+# API & Tech Stack Standards Guide
+
+**📚 Human-Readable Standard**: See [4-api-tech-stack-standards.md](../docs/standards/4-api-tech-stack-standards.md) for complete documentation.
+
+This guide ensures consuming apps use the correct versions and patterns for all technologies in the PACE stack, and follow API/RPC naming conventions.
+
+## AI Agent Instructions
+
+**When writing or modifying code, ALWAYS:**
+1. **Use Tailwind v4 CSS-first** - Use `@import 'tailwindcss'` and `@theme`, never `@tailwind` directives
+2. **Use theme variables** - Never use bracket syntax like `bg-[oklch(...)]`, always use theme variables (`bg-main-500`)
+3. **Use custom color namespaces** - Always use `main-*`, `sec-*`, `acc-*`, never standard Tailwind colors
+4. **Follow RPC naming** - Read operations: `data_*`, write operations: `app_*`, verbs: `create`, `read`, `update`, `delete`, `list`, `get`
+5. **Return ApiResult** - All RPCs must return ApiResult shape with proper error handling
+6. **Use TanStack Query** - Always use TanStack Query for server state, never `useState + useEffect`
+7. **Use React Hook Form + Zod** - Always use `useZodForm` from pace-core for forms
+8. **When fixing API or tech stack issues** - Use the **audit report** (`audit/<timestamp>-pace-core-audit.md`) and the **standard doc** section linked from the report; fix the cause (e.g. RPC naming, package versions, Vite config), do not silence tools. Re-run **`npm run validate`** to confirm.
+
+**Decision Tree: RPC Naming**
+```
+1. What operation is this?
+   ├─ Read (SELECT) → data_<domain>_<verb>
+   ├─ Write (INSERT/UPDATE/DELETE) → app_<domain>_<verb>
+   └─ Bulk operation → app_<domain>_<verb>_bulk
+
+2. What verb should I use?
+   ├─ Get single item → get
+   ├─ Get multiple items → list
+   ├─ Create → create
+   ├─ Update → update
+   ├─ Delete → delete
+   └─ Read (generic) → read
+```
+
+**Decision Tree: Styling**
+```
+1. What am I styling?
+   ├─ Component → Use pace-core component (already styled)
+   ├─ Layout → Use Tailwind utilities (grid, flex, gap)
+   └─ Custom → Use theme variables (main-*, sec-*, acc-*)
+
+2. Do I need a color?
+   ├─ YES → Use theme variable (bg-main-500, text-sec-700)
+   └─ NO → Use semantic class (bg-background, text-foreground)
+
+3. Am I using bracket syntax?
+   ├─ YES → WRONG - Use theme variable instead
+   └─ NO → Continue
+```
+
+## Tailwind CSS v4
+
+### MUST: Use Tailwind v4 CSS-First Approach
+
+**MUST use Tailwind v4 CSS-first syntax, NOT v3 patterns:**
+
+```css
+/* ✅ CORRECT: Tailwind v4 CSS-first (@import 'tailwindcss'; @theme { ... }) */
+/* ❌ WRONG: Tailwind v3 (@tailwind base/components/utilities directives) */
+```
+
+### MUST NOT: Use Bracket Syntax
+
+**MUST NOT use bracket syntax like `bg-[oklch(...)]`. Map everything through theme variables:**
+
+```tsx
+// ❌ WRONG: Bracket syntax (bg-[oklch(...)])
+// ✅ CORRECT: Theme variable (bg-main-500)
+```
+
+### MUST: Use Custom Color Namespaces
+
+**MUST use custom color namespaces:**
+- `main-*` for primary colors (green, emerald, teal, cyan, sky, blue)
+- `sec-*` for secondary colors (indigo, violet, purple, fuchsia, slate, gray, zinc, neutral, stone)
+- `acc-*` for accent colors (red, orange, amber, yellow, lime, pink, rose)
+
+```tsx
+// ✅ CORRECT: Custom namespaces (main-*, sec-*, acc-*)
+// ❌ WRONG: Standard Tailwind colors (blue-*, gray-*, red-*)
+```
+
+### MUST: Use Semantic Classes
+
+**MUST use semantic classes mapped in index.css:**
+
+```tsx
+// ✅ CORRECT - Semantic classes
+<div className="bg-background text-foreground">
+
+// ❌ WRONG - Direct color classes (unless necessary)
+<div className="bg-main-50 text-main-950">
+```
+
+## React 19+
+
+### MUST: Use React 19+ Features
+
+**MUST use React 19+ patterns:**
+
+```tsx
+// ✅ CORRECT: React 19+ features (Suspense, useTransition, etc.)
+import { Suspense, useTransition } from 'react';
+function App() {
+  const [isPending, startTransition] = useTransition();
+  return <Suspense fallback={<Loading />}><Component /></Suspense>;
+}
+```
+
+### MUST: Use Functional Components
+
+**MUST use functional components with hooks exclusively:**
+
+```tsx
+// ✅ CORRECT: Functional components with hooks
+function MyComponent() { const [state, setState] = useState(); return <div>...</div>; }
+
+// ❌ WRONG: Class components
+```
+
+## Supabase
+
+### MUST: Use Secure Supabase Client
+
+**MUST use `useSecureSupabase()` for all database operations:**
+
+```tsx
+// ✅ CORRECT: useSecureSupabase() from '@jmruthers/pace-core/rbac'
+// ❌ WRONG: createClient() from '@supabase/supabase-js' (base client)
+```
+
+### MUST: Enforce RLS
+
+**MUST ensure RLS is enabled on all tables. Never bypass RLS.**
+
+### SHOULD: Use RPC Functions
+
+**SHOULD use RPC functions for complex queries:**
+
+```tsx
+// ✅ CORRECT: RPC functions for complex queries
+const { data } = await secureSupabase.rpc('data_events_list', { organisation_id: orgId });
+
+// ❌ AVOID: Complex client-side queries with many joins
+```
+
+## TanStack Query
+
+### MUST: Use TanStack Query for Server State
+
+**MUST use TanStack Query for all server state management:**
+
+```tsx
+// ✅ CORRECT: TanStack Query for server state
+import { useQuery, useMutation } from '@tanstack/react-query';
+const { data, isLoading } = useQuery({ queryKey: ['events', orgId], queryFn: () => fetchEvents(orgId) });
+
+// ❌ WRONG: useState + useEffect for server state
+```
+
+### SHOULD: Configure Query Client
+
+**SHOULD configure QueryClient with appropriate defaults:**
+
+```tsx
+// ✅ CORRECT: Configure QueryClient with appropriate defaults (staleTime, cacheTime, retry)
+const queryClient = new QueryClient({ defaultOptions: { queries: { staleTime: 5 * 60 * 1000, cacheTime: 10 * 60 * 1000, retry: 1 } } });
+```
+
+## React Hook Form + Zod
+
+### MUST: Use React Hook Form with Zod
+
+**MUST use React Hook Form with Zod for all forms:**
+
+```tsx
+// ✅ CORRECT: React Hook Form + Zod (useZodForm from pace-core)
+import { useZodForm } from '@jmruthers/pace-core';
+const schema = z.object({ email: z.string().email(), name: z.string().min(1) });
+const form = useZodForm(schema);
+
+// ❌ WRONG: Manual form handling (useState for form state)
+```
+
+## Vite Configuration
+
+### MUST: Use Vite for Build Tooling
+
+**MUST use Vite for all build tooling:**
+
+```typescript
+// ✅ CORRECT: Vite for build tooling
+import { defineConfig } from 'vite';
+import react from '@vitejs/plugin-react';
+export default defineConfig({ plugins: [react()] });
+```
+
+### MUST: Configure Vite for pace-core
+
+**⚠️ CRITICAL: Vite configuration prevents React context mismatches!**
+
+**MUST** configure Vite to exclude `@jmruthers/pace-core` and `react-router-dom` from pre-bundling:
+
+```typescript
+// vite.config.ts
+import { defineConfig } from 'vite';
+import react from '@vitejs/plugin-react';
+import path from 'path';
+
+export default defineConfig({
+  plugins: [react()],
+  resolve: {
+    alias: {
+      '@': path.resolve(__dirname, './src'),
+    },
+    // CRITICAL: Dedupe React dependencies
+    dedupe: ['react', 'react-dom', 'react-router-dom'],
+  },
+  optimizeDeps: {
+    include: [
+      'react',
+      'react-dom',
+      'react/jsx-runtime',
+    ],
+    // CRITICAL: Exclude pace-core to prevent React context mismatches
+    exclude: ['@jmruthers/pace-core', 'react-router-dom'],
+  },
+});
+```
+
+**Why this matters:**
+- Pre-bundling `@jmruthers/pace-core` creates separate React instances
+- This causes "useUnifiedAuth must be used within a UnifiedAuthProvider" errors
+- Excluding it ensures pace-core uses the same React instance as your app
+- `react-router-dom` must also be excluded and deduped to prevent Router context errors
+
+### MUST: Use Environment Variables Correctly
+
+**MUST use `import.meta.env` for environment variables:**
+
+```tsx
+// ✅ CORRECT: import.meta.env.VITE_API_URL (Vite env vars)
+// ❌ WRONG: process.env.VITE_API_URL (Node.js env vars)
+```
+
+## API & RPC Patterns
+
+### MUST: Follow RPC Naming Convention
+
+**RPCs MUST follow pattern: `<family>_<domain>_<verb>`**
+
+- `data_*` prefix for read operations: `data_events_list`, `data_file_reference_list`
+- `app_*` prefix for write operations: `app_event_create`, `app_event_update`
+- CRUD verbs only: `create`, `read`, `update`, `delete`, `list`, `get`
+- Bulk operations: `_bulk` suffix (e.g., `app_event_create_bulk`)
+
+```sql
+-- ✅ CORRECT: data_events_list, app_event_create, app_event_create_bulk
+-- ❌ WRONG: getEvents, create_event (wrong naming pattern)
+```
+
+### MUST: Use ApiResult Shape
+
+**All RPCs MUST return ApiResult shape:**
+
+```typescript
+type ApiResult<T> = { ok: true; data: T } | { ok: false; error: ApiError };
+type ApiError = { code: string; message: string; details?: object };
+```
+
+```tsx
+// ✅ CORRECT: Handle ApiResult
+const result = await supabase.rpc('app_events_create', { name, date });
+if (!result.ok) {
+  // Handle error
+  return { ok: false, error: result.error };
+}
+return { ok: true, data: result.data };
+```
+
+### MUST: Enforce RLS in RPCs
+
+**RPCs MUST enforce RLS and tenant boundaries.** Never bypass RLS.
+
+### SHOULD: Make Write RPCs Idempotent
+
+**Write RPCs SHOULD be idempotent when possible:**
+
+```sql
+-- ✅ CORRECT: Idempotent create (ON CONFLICT DO NOTHING)
+INSERT INTO events (id, name, date)
+VALUES (p_event_id, p_name, p_date)
+ON CONFLICT (id) DO NOTHING;
+```
+
+## TypeScript
+
+**Note**: TypeScript configuration details are handled by ESLint and the standards. See [7-api-tech-stack-standards.md](../../packages/core/docs/standards/7-api-tech-stack-standards.md) for complete TypeScript setup.
+
+**MUST:**
+- Use TypeScript 5+ with strict mode
+- Follow TypeScript patterns from [4-code-quality-standards.md](../../packages/core/docs/standards/4-code-quality-standards.md)
+
+## Version Requirements
+
+### MUST: Use Required Versions
+
+**MUST use compatible versions:**
+
+- React: `^19.0.0`
+- TypeScript: `^5.0.0`
+- Tailwind CSS: `^4.0.0`
+- Vite: `^6.0.0`
+- Supabase: `^2.49.0+`
+
+**Check `package.json` for exact versions required by pace-core.**
+
+## Common Mistakes to Avoid
+
+**When writing code, NEVER:**
+1. **Use Tailwind v3 patterns** - Always use v4 CSS-first syntax
+   ```css
+   /* ❌ WRONG */
+   @tailwind base;
+   @tailwind components;
+   @tailwind utilities;
+   
+   /* ✅ CORRECT */
+   @import "tailwindcss";
+   @theme { /* ... */ }
+   ```
+
+2. **Use bracket syntax for colors** - Always use theme variables
+   ```tsx
+   // ❌ WRONG
+   <div className="bg-[oklch(0.5 0.2 250)]">
+   
+   // ✅ CORRECT
+   <div className="bg-main-500">
+   ```
+
+3. **Use standard Tailwind colors** - Always use custom namespaces (main-*, sec-*, acc-*)
+4. **Use useState + useEffect for server state** - Always use TanStack Query
+5. **Create RPCs without ApiResult** - Always return ApiResult shape
+6. **Use wrong RPC naming** - Always follow `data_*` or `app_*` pattern
+
+## Tech Stack Checklist
+
+Before committing, verify:
+- [ ] Tailwind v4 CSS-first syntax (no @tailwind directives)
+- [ ] No bracket syntax for colors (use theme variables)
+- [ ] Custom color namespaces (main-*, sec-*, acc-*)
+- [ ] React 19+ functional components
+- [ ] Secure Supabase client (useSecureSupabase)
+- [ ] TanStack Query for server state
+- [ ] React Hook Form + Zod for forms
+- [ ] Vite configured correctly (optimizeDeps.exclude, resolve.dedupe)
+- [ ] TypeScript 5+ with strict mode
+- [ ] All versions compatible with pace-core
+- [ ] RPCs follow naming convention (data_* or app_*)
+- [ ] RPCs return ApiResult shape
+- [ ] RPCs enforce RLS
+
+## Reference
+
+- Tailwind v4: https://tailwindcss.com/blog/tailwindcss-v4
+- React 19: https://react.dev/blog/2024/04/25/react-19-upgrade-guide
+- Supabase: https://supabase.com/docs
+- TanStack Query: https://tanstack.com/query
+- React Hook Form: https://react-hook-form.com
+- Vite: https://vitejs.dev

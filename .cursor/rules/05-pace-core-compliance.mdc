@@ -1,0 +1,587 @@
+---
+description: Enforce pace-core usage patterns and prevent custom solutions when pace-core provides functionality
+globs: ["src/**/*.{ts,tsx,js,jsx}"]
+alwaysApply: false
+paceCoreVersion: "0.6.x"
+rulesVersion: "2025-01-28"
+---
+# pace-core Compliance Guide
+
+**📚 Human-Readable Standard**: See [5-pace-core-compliance-standards.md](../docs/standards/5-pace-core-compliance-standards.md) for complete documentation.
+
+This guide ensures consuming apps use pace-core components, hooks, and utilities correctly, preventing duplication and maintaining consistency across the PACE suite.
+
+## AI Agent Instructions
+
+**When writing or modifying code, ALWAYS:**
+1. **Check pace-core first** - Before creating any component, hook, or utility, verify if pace-core provides it
+2. **Use pace-core components** - Never use native HTML elements (`<button>`, `<input>`) when pace-core provides components
+3. **Use pace-core hooks** - Never create custom hooks when pace-core provides equivalent functionality
+4. **Use secure Supabase client** - Always use `useSecureSupabase()`, never `createClient()` for queries
+5. **Read documentation** - Before using any pace-core component, check its documentation for required props and usage patterns
+6. **Follow provider nesting** - Always nest providers in the correct order (QueryClientProvider → BrowserRouter → UnifiedAuthProvider → OrganisationProvider)
+7. **Configure Vite correctly** - Always exclude `@jmruthers/pace-core` and `react-router-dom` from pre-bundling
+8. **When fixing compliance issues** - Use the **audit report** (`audit/<timestamp>-pace-core-audit.md`) and the **standard doc** section linked from the report; fix the cause, do not silence tools. Re-run **`npm run validate`** to confirm (type-check, lint, build, tests, pace-core audit).
+
+**Decision Tree: Should I create this or use pace-core?**
+```
+1. What am I trying to create?
+   ├─ Component (Button, Input, Card, etc.) → Use pace-core
+   ├─ Hook (auth, permissions, debounce, etc.) → Use pace-core
+   ├─ Utility (formatDate, cn, validation, etc.) → Use pace-core
+   └─ App-specific domain logic → Create custom (but follow pace-core patterns)
+
+2. Does pace-core provide this?
+   ├─ YES → Use pace-core (import from '@jmruthers/pace-core')
+   └─ NO → Check if it should be added to pace-core (for shared use)
+
+3. Am I about to use native HTML?
+   ├─ YES → Check if pace-core has equivalent component
+   └─ NO → Continue
+```
+
+## MUST: Use pace-core Instead of Custom Solutions
+
+**ALWAYS use pace-core components, hooks, and utilities when they exist.** Creating custom solutions duplicates functionality and breaks consistency.
+
+### Components
+
+**MUST use pace-core components:**
+- `Button`, `Card`, `Input`, `Label`, `Textarea` - Basic UI components
+- `Dialog`, `Select`, `Tabs`, `Calendar`, `Toast`, `Tooltip` - Advanced UI components
+- `DataTable` - Complex data tables with RBAC integration
+- `Form`, `FormField`, `LoginForm` - Form components
+- `Header`, `Footer`, `PaceAppLayout` - Layout components
+- `FileUpload`, `FileDisplay` - Storage components
+
+**MUST NOT:**
+- Create custom button components when `Button` from pace-core exists
+- Use native HTML elements (`<button>`, `<input>`) when pace-core provides components
+- Import directly from `@radix-ui/*` - Use pace-core wrappers instead
+- Import directly from `lucide-react` - Import icons from `@jmruthers/pace-core/icons` instead
+
+**Examples:**
+```tsx
+// ❌ WRONG: Native HTML button
+<button className="btn-primary" onClick={handleClick}>
+  Click me
+</button>
+
+// ✅ CORRECT: pace-core Button component
+import { Button } from '@jmruthers/pace-core';
+<Button onClick={handleClick}>Click me</Button>
+
+// ❌ WRONG: Native HTML input
+<input 
+  type="text" 
+  className="form-input" 
+  value={value} 
+  onChange={handleChange} 
+/>
+
+// ✅ CORRECT: pace-core Input component
+import { Input } from '@jmruthers/pace-core';
+<Input type="text" value={value} onChange={handleChange} />
+```
+
+### Hooks
+
+**MUST use pace-core hooks:**
+- `useUnifiedAuth`, `useEvents`, `useOrganisations` - Authentication and data
+- `usePermissions`, `useCan`, `useSecureSupabase` - RBAC hooks
+- `useToast`, `useDebounce`, `useZodForm` - Utility hooks
+- `useFileReference`, `useFileUpload` - File management hooks
+
+**MUST NOT:**
+- Create custom `useAuth` when `useUnifiedAuth` exists
+- Create custom `useToast` when pace-core provides it
+- Create custom `useDebounce` when pace-core provides it
+- Create custom form hooks when `useZodForm` exists
+
+**Example:**
+```tsx
+// ❌ WRONG: Custom useDebounce hook implementation
+// ✅ CORRECT: import { useDebounce } from '@jmruthers/pace-core'; const debouncedValue = useDebounce(value, 500);
+```
+
+### Utilities
+
+**MUST use pace-core utilities:**
+- `cn` - Class name utility (replaces clsx/tailwind-merge)
+- `formatDate`, `formatTime`, `formatDateTime` - Date formatting
+- `formatCurrency`, `formatNumber`, `formatPercent` - Number formatting
+- `emailSchema`, `nameSchema`, `passwordSchema` - Validation schemas
+- `validateUserInput`, `sanitizeUserInput` - Input validation
+
+**MUST NOT:**
+- Create custom `formatDate` when pace-core provides it
+- Use `clsx` directly - Use `cn` from pace-core
+- Create custom validation when pace-core schemas exist
+
+**Example:**
+```tsx
+// ❌ WRONG: Custom formatDate implementation
+// ✅ CORRECT: import { formatDate } from '@jmruthers/pace-core'; const formatted = formatDate(date);
+```
+
+## MUST: Use Secure Supabase Client
+
+**ALWAYS use `useSecureSupabase()` for all database operations.** Never use the base Supabase client directly for queries.
+
+**When writing database code:**
+1. Import: `import { useSecureSupabase } from '@jmruthers/pace-core/rbac'`
+2. Call hook: `const secureSupabase = useSecureSupabase()`
+3. Use for queries: `await secureSupabase.from('table').select('*')`
+4. Never use: `createClient()` for queries (only for provider setup)
+
+### Hard Requirements
+
+- **MUST NOT** import or call `createClient()` from `@supabase/supabase-js` in consuming app code **except** for creating the base client passed to `UnifiedAuthProvider`.
+- **MUST NOT** export, pass, or store an insecure Supabase client instance for general use.
+- **MUST** perform all `.from(...)`, `.rpc(...)`, `.auth.*`, and storage operations via the secure client returned by `useSecureSupabase()` (or the approved pace-core equivalent). The client returned by `useSecureSupabase()` exposes `storage` when the base client has it, so FileUpload and FileDisplay can use that same client (R04 storage-capable client).
+- **MUST** create the base Supabase client ONCE and pass it to `UnifiedAuthProvider` as `supabaseClient` prop.
+- **MUST** call `useSecureSupabase()` without parameters - it automatically uses the base client from `useUnifiedAuth()` provider layer.
+- **MUST NOT** pass a base client directly to `useSecureSupabase()` - the hook gets it from the provider automatically.
+
+### Why this is critical
+
+Using `createClient()` directly for queries can bypass organisation context enforcement and RLS policies, leading to:
+- Cross-organisation data access
+- Security vulnerabilities
+- Data leakage between organisations
+
+### Correct Pattern
+
+```tsx
+// ✅ CORRECT: Create base client ONCE for UnifiedAuthProvider
+// main.tsx or App.tsx
+import { createClient } from '@supabase/supabase-js';
+import { UnifiedAuthProvider } from '@jmruthers/pace-core';
+
+const supabase = createClient(
+  import.meta.env.VITE_SUPABASE_URL,
+  import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY
+);
+
+function App() {
+  return (
+    <UnifiedAuthProvider 
+      supabaseClient={supabase}  // Pass base client to provider
+      appName="YourApp"
+      // ... other props
+    >
+      <YourApp />
+    </UnifiedAuthProvider>
+  );
+}
+
+// ✅ CORRECT: Use secure client in components (no parameters needed)
+// YourComponent.tsx
+import { useSecureSupabase } from '@jmruthers/pace-core/rbac';
+
+function YourComponent() {
+  const secureSupabase = useSecureSupabase(); // Gets client from provider automatically
+  
+  if (!secureSupabase) {
+    return <div>Loading...</div>;
+  }
+  
+  // Use secureSupabase for all queries
+  const { data } = await secureSupabase.from('users').select('*');
+}
+```
+
+### Incorrect Patterns
+
+```tsx
+// ❌ FORBIDDEN: Creating client in component or service
+import { createClient } from '@supabase/supabase-js';
+const supabase = createClient(url, key); // Don't do this for queries
+
+// ❌ FORBIDDEN: Passing base client to useSecureSupabase
+import { useSecureSupabase } from '@jmruthers/pace-core/rbac';
+import { supabase } from './supabase'; // Don't export base client
+const secureSupabase = useSecureSupabase(supabase); // Don't pass it
+
+// ❌ FORBIDDEN: Using base client directly for queries
+const { data } = await supabase.from('users').select('*'); // Bypasses RLS
+```
+
+### Acceptable Exceptions
+
+**The ONLY acceptable use of `createClient()` in consuming app code is:**
+
+1. **Creating the base client for `UnifiedAuthProvider`** - This MUST be in one of these files:
+   - `src/main.tsx` (or `main.jsx`)
+   - `src/App.tsx` (or `App.jsx`)
+   - `src/lib/supabase.ts` (or `supabase.js`) - ONLY if this file is ONLY used to create the base client for the provider
+
+**The file containing the base client creation MUST:**
+- Be clearly named (e.g., `supabase.ts`, `main.tsx`)
+- Only create the client once
+- Pass it directly to `UnifiedAuthProvider` (not export it for general use)
+- Include a comment explaining it's the base client for the provider
+
+**NO OTHER EXCEPTIONS ARE PERMITTED** - All other uses of `createClient()` are security violations and MUST be fixed.
+
+**Note**: System-level validation of Supabase client usage is handled by the audit tool. See [5-pace-core-compliance-standards.md](../docs/standards/5-pace-core-compliance-standards.md) for complete enforcement details.
+
+## MUST: Setup RBAC Before Use
+
+**ALWAYS call `setupRBAC()` before any RBAC usage.** This is non-negotiable.
+
+```tsx
+// main.tsx - MUST be first
+import { setupRBAC } from '@jmruthers/pace-core/rbac';
+setupRBAC(supabase);
+// Then render app
+```
+
+## MUST: Read Documentation Before Using Components
+
+**ALWAYS read pace-core component documentation before using any component.** Never guess about props, usage patterns, or behavior.
+
+### Where to Find Documentation
+
+**Component API Reference:**
+- Location: `node_modules/@jmruthers/pace-core/docs/api-reference/components.md`
+- Or: Check pace-core repository `packages/core/docs/api-reference/components.md`
+- Contains: Complete prop definitions, type information, usage examples
+
+**Implementation Guides:**
+- Location: `node_modules/@jmruthers/pace-core/docs/implementation-guides/`
+- Contains: Detailed guides for complex components like DataTable, Forms, etc.
+- Examples:
+  - `data-tables.md` - DataTable component guide
+  - `forms.md` - Form components guide
+  - `file-upload-storage.md` - FileUpload/FileDisplay guide
+
+**Detailed API Documentation:**
+- Location: `node_modules/@jmruthers/pace-core/docs/api/`
+- Contains: In-depth API documentation for all exports
+
+**Quick Reference:**
+- Location: `node_modules/@jmruthers/pace-core/docs/getting-started/quick-reference.md`
+- Contains: Quick lookup for common patterns
+
+### How to Find Component-Specific Docs
+
+1. **Check API Reference First:**
+   ```bash
+   # In your consuming app
+   cat node_modules/@jmruthers/pace-core/docs/api-reference/components.md
+   ```
+
+2. **Search Implementation Guides:**
+   - Look for component name in `implementation-guides/` directory
+   - Complex components have dedicated guides
+
+3. **Check Type Definitions:**
+   ```tsx
+   // Import and check TypeScript types
+   import type { DataTableProps } from '@jmruthers/pace-core';
+   // Hover over type to see prop definitions
+   ```
+
+4. **Use IDE IntelliSense:**
+   - TypeScript types provide inline documentation
+   - Hover over component name to see prop types
+   - Use autocomplete to discover available props
+
+### MUST NOT: Guess About Props or Usage
+
+**❌ WRONG - Guessing props:**
+```tsx
+<DataTable data={data} columns={columns} /> // Missing required rbac prop
+```
+
+**✅ CORRECT - Read documentation first:**
+```tsx
+import { DataTable } from '@jmruthers/pace-core';
+<DataTable data={data} columns={columns} rbac={{ pageName: 'users' }} features={{ search: true }} />
+```
+
+### Documentation Checklist
+
+Before using any pace-core component:
+- [ ] Read component API reference
+- [ ] Check for implementation guide if component is complex
+- [ ] Review TypeScript types for prop definitions
+- [ ] Check examples in documentation
+- [ ] Verify required vs optional props
+- [ ] Understand component behavior and limitations
+
+### Common Documentation Locations
+
+| Component Type | Documentation Location |
+|----------------|----------------------|
+| Basic UI (Button, Card, etc.) | `api-reference/components.md` |
+| DataTable | `implementation-guides/data-tables.md` |
+| Forms | `implementation-guides/forms.md` |
+| RBAC Components | `rbac/getting-started.md` |
+| File Upload/Display | `implementation-guides/file-upload-storage.md` |
+| Hooks | `api-reference/hooks.md` |
+| Utilities | `api-reference/utilities.md` |
+
+## SHOULD: Check pace-core Before Creating New Components
+
+**Before creating a new component, hook, or utility:**
+
+1. Check pace-core exports: `@jmruthers/pace-core`
+2. Review pace-core documentation
+3. Check `core-usage-manifest.json` for available exports
+4. Search pace-core source if needed
+
+**If pace-core doesn't provide what you need:**
+- Consider if it should be added to pace-core (for shared use)
+- Document why custom solution is needed
+- Follow pace-core patterns for consistency
+
+## MUST: Provider Nesting Order
+
+**⚠️ CRITICAL: Provider nesting order matters!** Incorrect nesting causes React context errors.
+
+**MUST** nest providers in this exact order (outermost to innermost):
+
+1. `QueryClientProvider` (outermost)
+2. `BrowserRouter`
+3. `UnifiedAuthProvider`
+4. `OrganisationProvider`
+5. `App` (innermost)
+
+```tsx
+// ✅ CORRECT: main.tsx
+import { BrowserRouter } from 'react-router-dom';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { UnifiedAuthProvider, OrganisationProvider } from '@jmruthers/pace-core';
+import { createClient } from '@supabase/supabase-js';
+
+const queryClient = new QueryClient();
+const supabase = createClient(
+  import.meta.env.VITE_SUPABASE_URL,
+  import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY
+);
+
+createRoot(document.getElementById("root")!).render(
+  <QueryClientProvider client={queryClient}>
+    <BrowserRouter>
+      <UnifiedAuthProvider supabaseClient={supabase} appName="YourApp">
+        <OrganisationProvider>
+          <App />
+        </OrganisationProvider>
+      </UnifiedAuthProvider>
+    </BrowserRouter>
+  </QueryClientProvider>
+);
+```
+
+**Common mistakes to avoid:**
+- ❌ `BrowserRouter` inside `UnifiedAuthProvider` (causes Router context errors)
+- ❌ `UnifiedAuthProvider` wrapping `BrowserRouter` (causes context errors)
+- ❌ Missing `BrowserRouter` (causes `useNavigate` errors)
+
+## MUST: Vite Configuration
+
+**⚠️ CRITICAL: Vite configuration prevents React context mismatches!**
+
+**MUST** configure Vite to exclude `@jmruthers/pace-core` and `react-router-dom` from pre-bundling:
+
+```typescript
+// vite.config.ts
+import { defineConfig } from 'vite';
+import react from '@vitejs/plugin-react';
+import path from 'path';
+
+export default defineConfig({
+  plugins: [react()],
+  resolve: {
+    alias: {
+      '@': path.resolve(__dirname, './src'),
+    },
+    // CRITICAL: Dedupe React dependencies
+    dedupe: ['react', 'react-dom', 'react-router-dom'],
+  },
+  optimizeDeps: {
+    include: [
+      'react',
+      'react-dom',
+      'react/jsx-runtime',
+    ],
+    // CRITICAL: Exclude pace-core to prevent React context mismatches
+    exclude: ['@jmruthers/pace-core', 'react-router-dom'],
+  },
+});
+```
+
+**Why this matters:**
+- Pre-bundling `@jmruthers/pace-core` creates separate React instances
+- This causes "useUnifiedAuth must be used within a UnifiedAuthProvider" errors
+- Excluding it ensures pace-core uses the same React instance as your app
+- `react-router-dom` must also be excluded and deduped to prevent Router context errors
+
+**If you encounter context errors:**
+1. Verify `@jmruthers/pace-core` is in `optimizeDeps.exclude`
+2. Verify `react-router-dom` is in both `resolve.dedupe` and `optimizeDeps.exclude`
+3. Clear Vite cache: `rm -rf node_modules/.vite`
+4. Restart dev server
+
+## MUST: Import Core Styles
+
+**ALWAYS import pace-core styles via app.css:**
+
+The correct pattern is a two-file CSS architecture:
+1. `src/app.css` - Contains `@import "@jmruthers/pace-core/styles/core.css";` (CSS @import)
+2. `src/main.tsx` - Imports `./app.css` (JavaScript import)
+
+```tsx
+// main.tsx or App.tsx
+import './app.css';  // ✅ CORRECT - app.css imports core.css
+```
+
+```css
+/* src/app.css */
+@import "tailwindcss";
+@import "@jmruthers/pace-core/styles/core.css";  // CSS @import, not JavaScript import
+```
+
+**MUST NOT:**
+- Import `core.css` directly in `main.tsx` or `App.tsx` - This causes duplicate imports
+- Use JavaScript import for `core.css` - Use CSS `@import` in `app.css` instead
+
+**See [7-styling-standards.md](../../../docs/standards/7-styling-standards.md) for complete CSS setup instructions.**
+
+## MUST NOT: Use Inline Styles
+
+**NEVER use inline styles (`style={{...}}`).** All styling MUST come from pace-core components and Tailwind classes.
+
+### Why No Inline Styles
+
+- Inline styles override pace-core component styles
+- Inline styles break consistency across the PACE suite
+- Inline styles are harder to maintain and update
+- Inline styles don't benefit from theme variables and design system
+
+### Use pace-core Components for Styling
+
+**All styling MUST come from:**
+1. **pace-core components** - Components already have correct styling
+2. **Tailwind utility classes** - Use Tailwind classes for layout and spacing
+3. **Semantic classes** - Use semantic classes from pace-core (e.g., `bg-background`, `text-foreground`)
+
+**MUST NOT:**
+- Use `style={{...}}` prop
+- Use inline CSS strings
+- Override component styles with inline styles
+- Create custom CSS for styling that pace-core provides
+
+**Example:**
+```tsx
+// ❌ WRONG: <div style={{ backgroundColor: 'blue' }}> or <Button style={{...}}>
+// ✅ CORRECT: <Card className="bg-main-500 p-4"> or <Button variant="default"> or <div className="flex gap-4">
+```
+
+### When Tailwind Classes Are Acceptable
+
+**Tailwind classes are acceptable for:**
+- Layout (flex, grid, positioning)
+- Spacing (margin, padding, gap)
+- Responsive design (breakpoints)
+- Layout-specific styling not provided by pace-core components
+
+**Tailwind classes MUST NOT:**
+- Override pace-core component internal styles
+- Duplicate styling that pace-core components already provide
+- Use standard Tailwind colors (use `main-*`, `sec-*`, `acc-*` namespaces)
+
+### Styling Checklist
+
+Before adding any styling:
+- [ ] Check if pace-core component provides the styling you need
+- [ ] Use pace-core component variants/props for styling
+- [ ] Use Tailwind classes only for layout/spacing
+- [ ] Never use inline `style={{...}}` prop
+- [ ] Never override component styles with inline styles
+- [ ] Use semantic classes (`bg-background`, `text-foreground`) when available
+
+## SHOULD: Use pace-core Patterns
+
+**Follow pace-core patterns for consistency:**
+- Component structure and composition
+- Error handling patterns
+- Loading state patterns
+- Form validation patterns
+- RBAC permission checking patterns
+
+## Common Mistakes to Avoid
+
+**When writing code, NEVER:**
+1. **Use native HTML when pace-core provides components** - Always check pace-core first
+   ```tsx
+   // ❌ WRONG
+   <button>Click</button>
+   <input type="text" />
+   
+   // ✅ CORRECT
+   <Button>Click</Button>
+   <Input type="text" />
+   ```
+
+2. **Create wrapper functions around pace-core hooks** - Use hooks directly
+   ```tsx
+   // ❌ WRONG
+   function useMyAuth() {
+     const auth = useUnifiedAuth();
+     return { user: auth.user, isAdmin: auth.user?.role === 'admin' };
+   }
+   
+   // ✅ CORRECT
+   const { user } = useUnifiedAuth();
+   const { canManage } = useCan(user?.id, scope, 'manage:users');
+   ```
+
+3. **Use createClient() for queries** - Always use `useSecureSupabase()`
+   ```tsx
+   // ❌ WRONG
+   const supabase = createClient(url, key);
+   const { data } = await supabase.from('users').select('*');
+   
+   // ✅ CORRECT
+   const secureSupabase = useSecureSupabase();
+   const { data } = await secureSupabase.from('users').select('*');
+   ```
+
+4. **Guess component props** - Always read documentation first
+5. **Use inline styles** - Use pace-core components and Tailwind classes
+6. **Skip provider nesting** - Always nest in correct order
+7. **Skip Vite configuration** - Always exclude pace-core from pre-bundling
+
+## Compliance Exceptions
+
+**In general, pace-core compliance rules do NOT allow exceptions.** The rules are designed to ensure security, consistency, and maintainability across the PACE suite.
+
+### When Exceptions Are NOT Allowed
+
+- **Security rules** (e.g., `createClient()` usage) - NO exceptions except the one documented above
+- **RBAC rules** - NO exceptions
+- **Component usage** - NO exceptions (use pace-core components)
+- **Hook usage** - NO exceptions (use pace-core hooks)
+
+### Documenting Legitimate Edge Cases
+
+If you encounter a situation where a rule seems to conflict with a legitimate requirement:
+
+1. **First**: Verify that pace-core doesn't provide a solution
+2. **Second**: Check if the requirement should be added to pace-core
+3. **Third**: If truly unavoidable, document the case clearly with a comment explaining why
+
+**Note**: Even with documentation, exceptions should be temporary, rare, reviewed, and tracked for eventual removal.
+
+## Reference
+
+- **pace-core Exports**: See [pace-core documentation](../../packages/core/docs/README.md) for complete export reference
+- **RBAC Implementation**: See [6-security-rbac-standards.md](../../packages/core/docs/standards/6-security-rbac-standards.md) for RBAC patterns
+- **Component Documentation**: 
+  - API Reference: `node_modules/@jmruthers/pace-core/docs/api-reference/components.md`
+  - Implementation Guides: `node_modules/@jmruthers/pace-core/docs/implementation-guides/`
+  - Detailed API: `node_modules/@jmruthers/pace-core/docs/api/`
+- **Always read documentation before using components** - Never guess about props or usage

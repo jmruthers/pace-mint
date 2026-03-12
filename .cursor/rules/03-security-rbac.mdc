@@ -1,0 +1,642 @@
+---
+description: Enforce RBAC contract compliance, RLS policy patterns, and security requirements
+globs: ["src/**/*.{ts,tsx,js,jsx}", "supabase/migrations/**/*.sql"]
+alwaysApply: false
+paceCoreVersion: "0.6.x"
+rulesVersion: "2025-01-28"
+---
+# Security & RBAC Standards Guide
+
+**📚 Human-Readable Standard**: See [3-security-rbac-standards.md](../docs/standards/3-security-rbac-standards.md) for complete documentation including RLS policy patterns, helper functions, and security requirements.
+
+This guide enforces the **mandatory RBAC contract** and security patterns between pace-core and consuming apps.
+
+**⚠️ CRITICAL**: This contract is **non-negotiable**. See [RBAC Contract](../../packages/core/docs/rbac/RBAC_CONTRACT.md) for complete documentation.
+
+## AI Agent Instructions
+
+**When writing or modifying code, ALWAYS:**
+1. **Protect all pages** - Wrap every protected page with `PagePermissionGuard` (no exceptions)
+2. **Use pace-core hooks directly** - Never create wrapper functions around `useCan` or `useResourcePermissions`
+3. **Use RESOURCE_NAMES constants** - Never use string literals in `useResourcePermissions` calls
+4. **Validate all inputs** - Always validate user input with Zod schemas before processing
+5. **Never expose internals** - Never show SQL errors, stack traces, or internal details to users
+6. **Use helper functions in RLS** - Always use STABLE SECURITY DEFINER helper functions (when querying RLS-protected tables), never subqueries
+7. **Secure SECURITY DEFINER functions** - All SECURITY DEFINER functions must have `SET search_path TO public`, schema-qualified references, and documented rationale
+8. **Sanitize logs** - Never log passwords, tokens, or sensitive data
+9. **When fixing security or RBAC issues** - Use the **audit report** (`audit/<timestamp>-pace-core-audit.md`) and the **standard doc** section linked from the report; fix the cause (e.g. RLS policy, helper attributes, PagePermissionGuard, Edge Function setupRBAC), do not silence tools. Re-run **`npm run validate`** to confirm.
+
+**Decision Tree: Security & Permissions**
+```
+1. Is this a protected page?
+   ├─ YES → Wrap with PagePermissionGuard (no exceptions)
+   └─ NO → Continue
+
+2. Do I need to check permissions?
+   ├─ YES → Use pace-core hooks directly (useCan, useResourcePermissions)
+   └─ NO → Continue
+
+3. Am I handling user input?
+   ├─ YES → Validate with Zod schema
+   └─ NO → Continue
+
+4. Am I logging or showing errors?
+   ├─ YES → Never expose internals, sanitize sensitive data
+   └─ NO → Continue
+```
+
+## MUST: Use PagePermissionGuard for All Protected Pages
+
+**MUST wrap all protected pages with `PagePermissionGuard`:**
+
+```tsx
+// ✅ CORRECT
+import { PagePermissionGuard } from '@jmruthers/pace-core/rbac';
+
+function DashboardPage() {
+  return (
+    <PagePermissionGuard pageName="dashboard" operation="read">
+      <DashboardContent />
+    </PagePermissionGuard>
+  );
+}
+```
+
+**MUST NOT:**
+- Render protected content without `PagePermissionGuard`
+- Create wrapper components around `PagePermissionGuard`
+- Bypass page-level permission checks
+
+```tsx
+// ❌ FORBIDDEN - No guard
+function DashboardPage() {
+  return <DashboardContent />;  // ERROR: Unprotected page
+}
+
+// ❌ FORBIDDEN - Wrapper component
+function EventPageGuard({ pageName, children }) {
+  return <PagePermissionGuard pageName={pageName}>{children}</PagePermissionGuard>;
+}
+```
+
+## MUST: Use pace-core Permission Hooks Directly
+
+**MUST use pace-core hooks directly without wrappers:**
+
+```tsx
+// ✅ CORRECT
+import { useCan, useResourcePermissions } from '@jmruthers/pace-core/rbac';
+import { RESOURCE_NAMES } from '@/config/resource-names';
+
+function MyComponent() {
+  const { canUpdate, canDelete } = useResourcePermissions(RESOURCE_NAMES.JOURNAL);
+  const canEdit = useCan(userId, scope, 'update:users');
+  // Use canUpdate, canDelete, canEdit directly
+}
+```
+
+**MUST NOT:**
+- Create wrapper functions around permission hooks
+- Create custom permission utility functions
+- Use string literals in `useResourcePermissions` calls
+
+```tsx
+// ❌ FORBIDDEN - Wrapper function
+const canEdit = (postId: string) => {
+  const hasPermission = canUpdate('journal');
+  const post = posts.find(p => p.id === postId);
+  return hasPermission && !!post;
+};
+
+// ❌ FORBIDDEN - Custom utility
+function checkPermission(permission: string) {
+  // Custom logic...
+}
+
+// ❌ FORBIDDEN - String literal
+const { canUpdate } = useResourcePermissions('journal');
+```
+
+## MUST: Use RESOURCE_NAMES Constants
+
+**MUST use `RESOURCE_NAMES` constant object for all resource permission checks:**
+
+```tsx
+// ✅ CORRECT
+import { RESOURCE_NAMES } from '@/config/resource-names';
+const { canCreate, canUpdate, canDelete } = useResourcePermissions(RESOURCE_NAMES.JOURNAL);
+```
+
+**MUST NOT:**
+- Use string literals in `useResourcePermissions` calls
+- Hardcode resource names
+
+```tsx
+// ❌ FORBIDDEN - String literal
+const { canUpdate } = useResourcePermissions('journal');
+```
+
+## MUST: Use Standard AccessDenied Component
+
+**MUST use `AccessDenied` from pace-core for all access denied scenarios:**
+
+```tsx
+// ✅ CORRECT
+import { AccessDenied } from '@jmruthers/pace-core/rbac';
+
+<PagePermissionGuard 
+  pageName="dashboard" 
+  operation="read"
+  fallback={<AccessDenied />}
+>
+  <DashboardContent />
+</PagePermissionGuard>
+```
+
+**MUST NOT:**
+- Create custom access denied components
+- Use custom permission denied components
+
+```tsx
+// ❌ FORBIDDEN - Custom component
+function CustomAccessDenied() {
+  return <div>Access Denied</div>;
+}
+```
+
+## MUST: Use pace-core API for Permission Checks
+
+**MUST use pace-core API functions for programmatic permission checks:**
+
+```tsx
+// ✅ CORRECT
+import { isPermitted, isPermittedCached } from '@jmruthers/pace-core/rbac';
+
+const hasAccess = await isPermitted({
+  userId: 'user-123',
+  scope: { organisationId: 'org-456' },
+  permission: 'read:dashboard',
+  pageId: 'dashboard'
+});
+```
+
+**MUST NOT:**
+- Call RBAC RPC functions directly
+- Query RBAC tables directly (without `useSecureSupabase`)
+- Create custom RBAC helper functions
+
+```tsx
+// ❌ FORBIDDEN - Direct RPC call
+const { data } = await supabase.rpc('rbac_check_permission_simplified', {
+  p_user_id: userId,
+  p_permission: 'read:dashboard'
+});
+
+// ❌ FORBIDDEN - Direct table query
+const { data } = await supabase
+  .from('rbac_user_profiles')
+  .select('*');
+
+// ❌ FORBIDDEN - Custom RBAC helper
+function checkPermission(userId: string, permission: string) {
+  // Custom logic that bypasses pace-core
+}
+```
+
+## MUST: Use pace-core API in Edge Functions (No Exceptions)
+
+**Edge Functions (Deno serverless functions) MUST use pace-core's `isPermitted()` API function.** Edge Functions cannot use React hooks, but pace-core provides programmatic APIs that work outside React.
+
+**✅ CORRECT - Edge Function Pattern:**
+
+```typescript
+// supabase/functions/my-function/index.ts
+import { createClient } from 'jsr:@supabase/supabase-js@2';
+import { setupRBAC, isPermitted } from 'npm:@jmruthers/pace-core@^0.6.0/rbac';
+
+Deno.serve(async (req: Request) => {
+  // 1. Create Supabase client from request headers
+  const authHeader = req.headers.get('Authorization');
+  if (!authHeader) {
+    return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401 });
+  }
+
+  const supabase = createClient(
+    Deno.env.get('SUPABASE_URL') ?? '',
+    Deno.env.get('SUPABASE_ANON_KEY') ?? '',
+    {
+      global: {
+        headers: { Authorization: authHeader },
+      },
+    }
+  );
+
+  // 2. Get user from session
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) {
+    return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401 });
+  }
+
+  // 3. Setup RBAC (required before using isPermitted)
+  setupRBAC(supabase);
+
+  // 4. Extract organisation context from request (headers, body, or query params)
+  const organisationId = req.headers.get('x-organisation-id') || 
+                         (await req.json()).organisationId;
+
+  if (!organisationId) {
+    return new Response(JSON.stringify({ error: 'Organisation context required' }), { status: 400 });
+  }
+
+  // 5. Check permission using pace-core API
+  const hasPermission = await isPermitted({
+    userId: user.id,
+    scope: { organisationId },
+    permission: 'read:dashboard',
+    pageId: 'dashboard'
+  });
+
+  if (!hasPermission) {
+    return new Response(JSON.stringify({ error: 'Permission denied' }), { status: 403 });
+  }
+
+  // 6. Proceed with function logic
+  return new Response(JSON.stringify({ success: true }));
+});
+```
+
+**❌ FORBIDDEN - Custom RBAC Helper in Edge Functions:**
+
+```typescript
+// ❌ FORBIDDEN - Creating custom RBAC helper
+// supabase/functions/_shared/rbac.ts
+export async function checkPermission(userId: string, permission: string) {
+  // Custom logic that bypasses pace-core
+  const { data } = await supabase.rpc('rbac_check_permission_simplified', {
+    p_user_id: userId,
+    p_permission: permission
+  });
+  return data;
+}
+```
+
+**Why No Exceptions:**
+- pace-core provides `isPermitted()` API that works outside React
+- `setupRBAC()` initializes the engine with a Supabase client
+- No custom helpers needed - use pace-core APIs directly
+- Custom helpers bypass security validation, caching, and audit logging
+
+**Edge Function Requirements:**
+1. **MUST** call `setupRBAC(supabase)` before using `isPermitted()`
+2. **MUST** extract `userId` from Supabase auth session
+3. **MUST** extract `organisationId` from request (headers, body, or query params)
+4. **MUST** use `isPermitted()` with complete `PermissionCheck` input
+5. **MUST NOT** create custom RBAC helper functions
+6. **MUST NOT** call `rbac_check_permission_simplified` RPC directly
+
+## MUST: Use useSecureSupabase for RBAC Table Queries
+
+**If you must query RBAC tables (rare), MUST use `useSecureSupabase`:**
+
+```tsx
+// ✅ CORRECT
+import { useSecureSupabase } from '@jmruthers/pace-core/rbac';
+
+function MyComponent() {
+  const secureSupabase = useSecureSupabase();
+  // If your hook signature requires a client argument, pass ONLY the pace-core-provided client (never a local createClient()).
+  const { data } = await secureSupabase
+    .from('rbac_user_profiles')  // Allowed through secure client
+    .select('*');
+}
+```
+
+**MUST NOT query these tables directly:**
+- `rbac_organisation_roles`
+- `rbac_event_app_roles`
+- `rbac_global_roles`
+- `rbac_apps`
+- `rbac_app_pages`
+- `rbac_page_permissions`
+- `rbac_user_profiles`
+
+## MUST NOT: Use Hardcoded Role Checks
+
+**MUST NOT compare roles directly:**
+
+```tsx
+// ❌ FORBIDDEN - Hardcoded role check
+if (user.role === 'admin') {
+  // ...
+}
+```
+
+**MUST use pace-core APIs:**
+
+```tsx
+// ✅ CORRECT
+import { useAccessLevel, getRoleContext } from '@jmruthers/pace-core/rbac';
+
+const { accessLevel } = useAccessLevel(userId, scope);
+const roleContext = await getRoleContext({ userId, scope });
+```
+
+## MUST: Configure enforcePermissions Correctly
+
+**For event-based apps (where pages handle their own checks):**
+
+```tsx
+// ✅ CORRECT - Event-based app pattern
+<PaceAppLayout 
+  appName="MyApp"
+  enforcePermissions={false}  // Pages handle checks via PagePermissionGuard
+  // ...
+>
+```
+
+**For organisation-based apps (where layout handles checks):**
+
+```tsx
+// ✅ CORRECT - Organisation-based app pattern
+<PaceAppLayout 
+  appName="MyApp"
+  enforcePermissions={true}  // Layout handles checks
+  defaultPermission="read"
+  // ...
+>
+```
+
+## MUST: Setup RBAC Before Use
+
+**MUST call `setupRBAC()` before any RBAC usage:**
+
+```tsx
+// main.tsx - MUST be first
+import { setupRBAC } from '@jmruthers/pace-core/rbac';
+setupRBAC(supabase);
+// Then render app
+```
+
+## Enforcement
+
+These rules are enforced by ESLint rules (all ERROR severity):
+
+1. **`no-direct-rbac-rpc`** - Detects direct calls to `rbac_check_permission_simplified`
+2. **`no-direct-rbac-tables`** - Detects direct queries to RBAC tables
+3. **`no-bypass-page-guard`** - Detects routes without `PagePermissionGuard`
+4. **`no-custom-access-denied`** - Detects custom access denied components
+5. **`no-hardcoded-role-checks`** - Detects hardcoded role comparisons
+6. **`no-custom-permission-utilities`** - Detects custom permission utility functions
+7. **`no-resource-permission-string-literals`** - Detects string literals in `useResourcePermissions` calls
+8. **`no-permission-wrapper-functions`** - Detects wrapper functions around pace-core permission hooks
+
+## Common Mistakes to Avoid
+
+**When writing code, NEVER:**
+1. **Skip PagePermissionGuard** - Every protected page must be wrapped
+   ```tsx
+   // ❌ WRONG
+   function DashboardPage() {
+     return <DashboardContent />;
+   }
+   
+   // ✅ CORRECT
+   function DashboardPage() {
+     return (
+       <PagePermissionGuard pageName="dashboard" operation="read">
+         <DashboardContent />
+       </PagePermissionGuard>
+     );
+   }
+   ```
+
+2. **Create wrapper functions around permission hooks** - Use hooks directly
+3. **Use string literals in useResourcePermissions** - Always use RESOURCE_NAMES constants
+4. **Bypass input validation** - Always validate with Zod schemas
+5. **Expose internal errors** - Never show SQL, stack traces, or file paths to users
+6. **Log sensitive data** - Never log passwords, tokens, or PII
+
+## Compliance Checklist
+
+Before committing RBAC-related code, verify:
+
+- [ ] All protected pages use `PagePermissionGuard`
+- [ ] No wrapper components around `PagePermissionGuard`
+- [ ] No wrapper functions around permission hooks
+- [ ] All `useResourcePermissions` calls use `RESOURCE_NAMES` constants
+- [ ] No direct RPC calls to `rbac_check_permission_simplified`
+- [ ] No direct queries to RBAC tables (use `useSecureSupabase` if needed)
+- [ ] No hardcoded role checks (use `useAccessLevel` or `getRoleContext`)
+- [ ] No custom permission utility functions
+- [ ] All access denied scenarios use `AccessDenied` from pace-core
+- [ ] `enforcePermissions` configured correctly for app type
+- [ ] `setupRBAC()` called before any RBAC usage
+- [ ] Edge Functions use `isPermitted()` API (no custom RBAC helpers)
+- [ ] All RLS policies for authenticated users include super-admin checks
+- [ ] All `is_super_admin()` calls use explicit parameter (`safe_get_user_id_for_rls()`)
+- [ ] No security-critical functions use fallback strategies
+- [ ] All SECURITY DEFINER functions have `SET search_path TO public` (MANDATORY)
+- [ ] All SECURITY DEFINER functions schema-qualify table/function references
+- [ ] All SECURITY DEFINER functions document why SECURITY DEFINER is needed
+- [ ] ESLint rules pass without errors
+
+## MUST: Include Super-Admin Checks in RLS Policies
+
+**MUST include super-admin bypass in all RLS policies for authenticated users:**
+
+```sql
+-- ✅ CORRECT: Super-admin check included
+CREATE POLICY "rbac_select_table_name" ON table_name
+FOR SELECT TO authenticated
+USING (
+  organisation_id IS NOT NULL
+  AND (
+    is_super_admin(safe_get_user_id_for_rls())
+    OR check_user_organisation_access(organisation_id)
+  )
+);
+```
+
+**MUST NOT:**
+- Create RLS policies without super-admin checks (except for public/anonymous policies)
+- Use `is_super_admin()` without a parameter (relies on fallback strategies)
+- Create security-critical functions with fallback strategies
+
+```sql
+-- ❌ FORBIDDEN: Missing super-admin check
+CREATE POLICY "rbac_select_table_name" ON table_name
+FOR SELECT TO authenticated
+USING (
+  check_user_organisation_access(organisation_id)
+);
+
+-- ❌ FORBIDDEN: is_super_admin() without parameter
+CREATE POLICY "rbac_select_table_name" ON table_name
+FOR SELECT TO authenticated
+USING (
+  is_super_admin()  -- Missing parameter, uses fallback strategies
+  OR check_user_organisation_access(organisation_id)
+);
+```
+
+**MUST use explicit parameter passing:**
+
+```sql
+-- ✅ CORRECT: Explicit user ID parameter
+is_super_admin(safe_get_user_id_for_rls())
+```
+
+**MUST NOT create security-critical functions with fallback strategies:**
+
+```sql
+-- ❌ FORBIDDEN: Multiple fallback strategies
+CREATE FUNCTION is_super_admin(p_user_id UUID DEFAULT NULL)
+RETURNS boolean AS $$
+BEGIN
+  IF p_user_id IS NOT NULL THEN
+    v_user_id := p_user_id;
+  ELSE
+    v_user_id := auth.uid();  -- Fallback 1
+  END IF;
+  -- More fallbacks...
+END;
+$$;
+
+-- ✅ CORRECT: Required parameter, no fallbacks
+CREATE FUNCTION is_super_admin(p_user_id UUID)
+RETURNS boolean AS $$
+BEGIN
+  IF p_user_id IS NULL THEN
+    RETURN false;  -- Fail secure
+  END IF;
+  -- Check super-admin status
+END;
+$$;
+```
+
+## MUST: Use SECURITY DEFINER Only When Necessary
+
+**SECURITY DEFINER is REQUIRED when helper functions query tables with RLS policies.** Without it, calling these functions from RLS policies creates circular dependencies.
+
+**Decision Tree:**
+```
+1. Does this helper function query tables with RLS policies?
+   ├─ YES → SECURITY DEFINER required (to avoid circular RLS)
+   │         └─ Continue to security requirements
+   └─ NO → Continue to step 2
+
+2. Does this function need elevated privileges?
+   ├─ YES → SECURITY DEFINER may be appropriate (document why)
+   │         └─ Continue to security requirements
+   └─ NO → SECURITY DEFINER not needed
+            └─ Use STABLE or IMMUTABLE only
+
+3. Security requirements (MANDATORY for SECURITY DEFINER):
+   ├─ SET search_path TO public ✅ MANDATORY
+   ├─ Schema-qualify all references ✅ MANDATORY
+   ├─ Use STABLE/IMMUTABLE when possible ✅ REQUIRED
+   ├─ Owned by appropriate role ✅ RECOMMENDED
+   └─ Document why in COMMENT ✅ REQUIRED
+```
+
+**✅ CORRECT: SECURITY DEFINER with all security requirements:**
+
+```sql
+-- ✅ CORRECT: SECURITY DEFINER required (queries RLS-protected table)
+CREATE OR REPLACE FUNCTION check_user_organisation_access(p_organisation_id UUID)
+RETURNS boolean
+LANGUAGE plpgsql
+STABLE                    -- ✅ Performance optimization
+SECURITY DEFINER          -- ✅ Required: queries rbac_organisation_roles (has RLS)
+SET search_path TO public -- ✅ MANDATORY: prevents search path hijacking
+AS $$
+BEGIN
+  -- ✅ Schema-qualified reference
+  RETURN EXISTS (
+    SELECT 1 FROM public.rbac_organisation_roles
+    WHERE user_id = auth.uid()
+    AND organisation_id = p_organisation_id
+  );
+END;
+$$;
+
+-- ✅ Document why SECURITY DEFINER is needed
+COMMENT ON FUNCTION check_user_organisation_access(UUID) IS 
+  'Checks if current user has access to organisation. SECURITY DEFINER required because function queries public.rbac_organisation_roles which has RLS policies. Without SECURITY DEFINER, this would create circular RLS dependency. STABLE for RLS policy performance. SET search_path TO public prevents search path hijacking.';
+```
+
+**✅ CORRECT: No SECURITY DEFINER needed (pure computation):**
+
+```sql
+-- ✅ CORRECT: No SECURITY DEFINER needed (no RLS-protected queries)
+CREATE OR REPLACE FUNCTION calculate_total(p_amount NUMERIC, p_tax_rate NUMERIC)
+RETURNS NUMERIC
+LANGUAGE plpgsql
+STABLE  -- ✅ STABLE for performance, but no SECURITY DEFINER needed
+AS $$
+BEGIN
+  RETURN p_amount * (1 + p_tax_rate);  -- Pure computation, no table queries
+END;
+$$;
+```
+
+**MUST NOT:**
+- Use SECURITY DEFINER without `SET search_path TO public` (security risk)
+- Use unqualified table/function references in SECURITY DEFINER functions (security risk)
+- Use SECURITY DEFINER for functions that don't query RLS-protected tables (unnecessary)
+- Create SECURITY DEFINER functions without documenting why (maintenance risk)
+
+```sql
+-- ❌ FORBIDDEN: Missing SET search_path (security risk)
+CREATE OR REPLACE FUNCTION bad_function()
+RETURNS boolean
+LANGUAGE plpgsql
+STABLE
+SECURITY DEFINER  -- Missing SET search_path TO public!
+AS $$
+BEGIN
+  RETURN EXISTS (SELECT 1 FROM rbac_organisation_roles);
+END;
+$$;
+
+-- ❌ FORBIDDEN: Unqualified reference (security risk)
+CREATE OR REPLACE FUNCTION bad_function()
+RETURNS boolean
+LANGUAGE plpgsql
+STABLE
+SECURITY DEFINER
+SET search_path TO public
+AS $$
+BEGIN
+  RETURN EXISTS (SELECT 1 FROM rbac_organisation_roles);  -- Should be public.rbac_organisation_roles
+END;
+$$;
+
+-- ❌ FORBIDDEN: SECURITY DEFINER without justification
+CREATE OR REPLACE FUNCTION pure_computation(x NUMERIC)
+RETURNS NUMERIC
+LANGUAGE plpgsql
+STABLE
+SECURITY DEFINER  -- Not needed! Function doesn't query RLS-protected tables
+AS $$
+BEGIN
+  RETURN x * 2;  -- Pure computation, no table queries
+END;
+$$;
+```
+
+**Security Checklist for SECURITY DEFINER Functions:**
+- [ ] `SET search_path TO public` is present (MANDATORY)
+- [ ] All table/function references are schema-qualified (e.g., `public.table_name`)
+- [ ] Function is marked `STABLE` or `IMMUTABLE` when possible
+- [ ] Function ownership uses least-privilege role (not superuser unless necessary)
+- [ ] COMMENT documents why SECURITY DEFINER is needed
+- [ ] Function actually queries RLS-protected tables (justification for SECURITY DEFINER)
+
+## Reference
+
+- **RBAC Contract**: `packages/core/docs/rbac/RBAC_CONTRACT.md` - Complete contract documentation
+- **Migration Guide**: `packages/core/docs/rbac/MIGRATION_GUIDE.md` - Migrating to RBAC Contract v2.0.0
+- **Quick Start**: `packages/core/docs/rbac/quick-start.md` - Getting started guide
+- **API Reference**: `packages/core/docs/rbac/api-reference.md` - Complete API documentation
+- **RLS Standards**: [6-security-rbac-standards.md](../../packages/core/docs/standards/6-security-rbac-standards.md) - RLS policy patterns and super-admin requirements

@@ -1,0 +1,215 @@
+---
+description: Define standard folder structure and file organization for consuming apps
+globs: ["**/*.{ts,tsx,js,jsx,md}", "src/**"]
+alwaysApply: false
+paceCoreVersion: "0.6.x"
+rulesVersion: "2025-01-28"
+---
+# Project Structure Standard
+
+**📚 Human-Readable Standard**: See [1-project-structure-standards.md](../docs/standards/1-project-structure-standards.md) for complete documentation including migration guides and detailed examples.
+
+This guide defines the standard folder structure and file organization for consuming apps in the PACE suite.
+
+## AI Agent Instructions
+
+**When creating or organizing files, ALWAYS:**
+1. **Organize by feature** - Group components, hooks, and utilities by feature, not by type
+2. **Colocate tests** - Place test files next to source files (`Component.test.tsx` next to `Component.tsx`)
+3. **Follow naming conventions** - Components: `PascalCase.tsx`, Hooks: `use*.ts`, Utils: `camelCase.ts`
+4. **Use absolute imports** - Use `@/` path alias for imports, never relative imports for distant files
+5. **Keep root clean** - Only configuration files and documentation in root, never source files
+6. **Place migrations correctly** - All migrations in `supabase/migrations/` with timestamp format
+7. **When fixing project structure issues** - Use the **audit report** (`audit/<timestamp>-pace-core-audit.md`) and the **standard doc** section linked from the report; fix the cause, do not silence tools. Re-run **`npm run validate`** to confirm.
+
+**Decision Tree: File Organization**
+```
+1. Where should this file go?
+   ├─ Component → src/components/<feature>/ComponentName.tsx
+   ├─ Hook → src/hooks/useHookName.ts (or colocated with component)
+   ├─ Utility → src/utils/utilityName.ts
+   ├─ Type → src/types/typeName.ts (or colocated with feature)
+   ├─ Test → Next to source file (ComponentName.test.tsx)
+   └─ Migration → supabase/migrations/YYYYMMDDHHMMSS_description.sql
+
+2. How should I name it?
+   ├─ Component → PascalCase (EventCard.tsx)
+   ├─ Hook → camelCase with use prefix (useEventData.ts)
+   ├─ Utility → camelCase (formatEvent.ts)
+   └─ Test → Same as source + .test (EventCard.test.tsx)
+
+3. Should I use absolute or relative imports?
+   ├─ Same directory → Relative (./Component)
+   ├─ Different directory → Absolute (@/components/events/EventCard)
+   └─ pace-core → Package import (@jmruthers/pace-core)
+```
+
+## MUST: Follow Standard Directory Structure
+
+**Consuming apps MUST follow this structure:**
+
+```
+your-app/
+├── .cursor/
+│   └── rules/          # Cursor rules (pace-core rules + local rules)
+├── src/
+│   ├── components/     # App-specific components
+│   ├── hooks/          # App-specific hooks
+│   ├── services/       # App-specific services
+│   ├── pages/          # Page components
+│   ├── types/          # TypeScript type definitions
+│   ├── utils/          # App-specific utilities
+│   ├── App.tsx         # Main app component
+│   └── main.tsx        # Entry point
+├── supabase/
+│   ├── migrations/     # Database migrations
+│   └── functions/      # Edge functions (if used)
+├── public/             # Static assets
+├── tests/              # Integration/E2E tests (optional)
+├── audit/              # Audit reports (generated)
+├── package.json
+├── tsconfig.json
+├── vite.config.ts
+└── vitest.config.ts
+```
+
+## MUST: Organize Components by Feature
+
+**ALWAYS organize components by feature, not by type:**
+
+```
+src/
+├── components/
+│   ├── events/         # Event-related components
+│   │   ├── EventCard.tsx
+│   │   └── EventList.tsx
+│   ├── users/          # User-related components
+│   │   ├── UserProfile.tsx
+│   │   └── UserList.tsx
+│   └── shared/         # Shared app-specific components
+│       ├── Layout.tsx
+│       └── Navigation.tsx
+```
+
+**MUST NOT:**
+- Organize by component type (`buttons/`, `inputs/`, etc.) - use pace-core instead
+- Create duplicate components that pace-core provides
+
+## MUST: Colocate Tests
+
+**ALWAYS colocate tests with source files:**
+
+```
+src/
+├── components/
+│   └── EventCard/
+│       ├── EventCard.tsx
+│       └── EventCard.test.tsx
+├── hooks/
+│   ├── useEventData.ts
+│   └── useEventData.test.ts
+└── utils/
+    ├── formatEvent.ts
+    └── formatEvent.test.ts
+```
+
+## MUST: Follow Naming Conventions
+
+### Files
+- Components: `PascalCase.tsx` (e.g., `EventCard.tsx`)
+- Hooks: `camelCase.ts` with `use` prefix (e.g., `useEventData.ts`)
+- Utilities: `camelCase.ts` (e.g., `formatEvent.ts`)
+- Types: `camelCase.ts` or `types.ts` (e.g., `eventTypes.ts`)
+- Tests: `*.test.ts` or `*.test.tsx`
+- Config: `kebab-case.config.js` (e.g., `vite.config.ts`)
+
+### Directories
+- Use `kebab-case` for directories (e.g., `event-management/`)
+- Match feature/domain names
+
+## MUST: Place Migrations Correctly
+
+**Database migrations MUST be in `supabase/migrations/`:**
+- Format: `YYYYMMDDHHMMSS_description.sql`
+- Example: `20250115143022_add_user_preferences.sql`
+
+- If this app **intentionally has no app-owned migrations** (e.g., relies on shared DB managed elsewhere), you MUST add `supabase/README.md` explaining:
+  - where migrations/RLS policies are managed
+  - whether the app is expected to add migrations in the future
+
+## MUST: Keep Root Directory Clean
+
+**Root directory SHOULD only contain:**
+- Configuration files (`package.json`, `tsconfig.json`, etc.)
+- Documentation (`README.md`, `CHANGELOG.md`)
+- Build outputs (`.gitignore` them)
+- `.cursor/` directory
+
+**MUST NOT:**
+- Place source files in root
+- Place test files in root
+- Place component files in root
+
+## MUST: Use Consistent Import Paths
+
+**ALWAYS use consistent import patterns:**
+
+```tsx
+// ✅ CORRECT - Absolute imports from src
+import { EventCard } from '@/components/events/EventCard';
+import { useEventData } from '@/hooks/useEventData';
+import { formatEvent } from '@/utils/formatEvent';
+
+// ✅ CORRECT - pace-core imports
+import { Button, Card } from '@jmruthers/pace-core';
+import { useUnifiedAuth } from '@jmruthers/pace-core';
+
+// ❌ WRONG - Relative imports for distant files
+import { EventCard } from '../../../components/events/EventCard';
+```
+
+**Configure path aliases in `tsconfig.json`:**
+```json
+{
+  "compilerOptions": {
+    "paths": {
+      "@/*": ["./src/*"]
+    }
+  }
+}
+```
+
+## MUST: Separate App Code from pace-core
+
+**MUST NOT:**
+- Modify pace-core code directly
+- Create components that duplicate pace-core functionality
+- Import from pace-core source (use published package)
+
+**MUST:**
+- Use pace-core as a dependency
+- Import from `@jmruthers/pace-core`
+- Create app-specific components only when pace-core doesn't provide them
+
+## SHOULD: Document Structure Decisions
+
+**For non-standard structures, SHOULD document why:**
+- Add `STRUCTURE.md` or section in `README.md`
+- Explain deviations from standard
+- Justify custom organization
+
+## File Organization Checklist
+
+Before committing, verify:
+- [ ] Components organized by feature, not type
+- [ ] Tests colocated with source files
+- [ ] Naming conventions followed
+- [ ] Migrations in `supabase/migrations/`
+- [ ] Root directory clean
+- [ ] Import paths consistent
+- [ ] No pace-core code modifications
+- [ ] Structure documented if non-standard
+
+## Reference
+
+**Note**: File structure validation is handled by the audit tool. See [1-project-structure-standards.md](../docs/standards/1-project-structure-standards.md) for complete enforcement details.

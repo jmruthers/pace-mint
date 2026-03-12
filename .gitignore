@@ -1,0 +1,30 @@
+# Dependencies
+node_modules/
+
+# Build
+dist/
+*.local
+
+# Package docs and templates (copied from repo root by copy-package-assets.cjs; do not commit)
+packages/core/docs/
+packages/core/templates/
+
+# Environment
+.env
+.env.*.local
+
+# Audit reports (optional: remove to commit reports)
+audit/*.md
+
+# Test coverage
+coverage/
+
+# IDE / OS
+.idea/
+.vscode/
+*.swp
+.DS_Store
+
+# Logs
+*.log
+npm-debug.log*
