@@ -83,6 +83,8 @@ COMMENT ON FUNCTION function_name(parameters) IS
 - [ ] Function ownership uses least-privilege role (not superuser unless necessary)
 - [ ] COMMENT documents why SECURITY DEFINER is needed
 
+> **Trigger functions** follow the same `SET search_path TO public` and `COMMENT ON FUNCTION` requirements as RLS helpers, but use `VOLATILE` instead of `STABLE` (required by PostgreSQL for trigger functions). See [API & Tech Stack Standards -- Trigger Function Standards](./4-api-tech-stack-standards.md#trigger-function-standards) for the full trigger-specific requirements.
+
 ### Forbidden Patterns
 
 **❌ NEVER use these patterns in RLS policies:**
@@ -386,12 +388,12 @@ These functions are available for use in RLS policies:
 - **Returns**: `UUID`
 - **Purpose**: Returns the UUID for any registered app
 - **Usage**: `get_app_id('BASE')`, `get_app_id('PACE')`, `get_app_id('CAKE')`
-- **Note**: Replaces `get_base_app_id()`, `get_pace_app_id()`, `util_get_cake_app_id()`
+- **Note**: Replaced and dropped legacy functions `get_base_app_id()`, `get_pace_app_id()`, `util_get_cake_app_id()` (no longer exist in database)
 
-#### `get_organisation_context()`
+#### `get_current_organisation_context()`
 - **Returns**: `UUID`
 - **Purpose**: Returns the current organisation context from the session
-- **Usage**: `get_organisation_context()`
+- **Usage**: `get_current_organisation_context()`
 
 #### `is_authenticated_user()`
 - **Returns**: `boolean`
@@ -444,6 +446,8 @@ These functions are available for use in RLS policies:
 ## RLS Policy Patterns
 
 This section documents the standard RLS policy patterns used throughout the codebase. All patterns follow the principles of using helper functions, enforcing security by default, and maintaining consistent structure.
+
+> **Prerequisite:** All RLS policy patterns below assume the table has `organisation_id` (and `event_id` for event-scoped tables). See [Table Schema Standards](./4-api-tech-stack-standards.md#table-schema-standards) for the required columns every table must have, including the exceptions list for tables that do not require `organisation_id`.
 
 ### Policy Naming Convention
 
@@ -897,6 +901,15 @@ USING (is_authenticated_user());
 - Super simple - just check if user is authenticated
 - These tables typically don't have organisation_id
 
+### RBAC app resolution (rbac_apps)
+
+**Contract for consuming apps (e.g. pace-mint):** pace-core resolves the app id by querying `public.rbac_apps` (via the Supabase client passed to `setupRBAC()`) for a row with `name = <app name>` and `is_active = true`. For that to succeed:
+
+- The role used for the request (e.g. `authenticated`) **must** be allowed by RLS to SELECT rows in `public.rbac_apps` where `is_active = true`. If not, app resolution can return 406 and RBAC context fails to load.
+- The app row must exist with the correct `name` and `is_active = true`.
+
+A dedicated SELECT policy (e.g. `rbac_select_rbac_apps_app_resolution`) that allows `authenticated` to SELECT when `is_authenticated_user() AND is_active = true` satisfies this contract. Do not require organisation context or permission checks that depend on app id for this table, or app resolution becomes circular.
+
 ### Super Admin Only Policy
 
 **Use Case:** Tables that only super admins should access.
@@ -1077,6 +1090,10 @@ USING (organisation_id = current_setting('app.organisation_id')::UUID)
 
 -- Public policy without proper checks
 USING (true)  -- Allows anyone!
+
+-- Always-true write policies on audit/log tables
+-- (19 such policies were found on MINT tables and pump_scheduled_jobs
+--  during the 2026-03-14 security audit and replaced with proper RBAC checks)
 ```
 
 **✅ DO:**
@@ -1128,15 +1145,16 @@ selectedOrganisationId: selectedOrganisation?.id,
 
 Tables are assigned to specific apps for RBAC permission checking:
 
-| App | Tables |
-|-----|--------|
-| **BASE** | `base_*` tables |
-| **PACE** | `pace_*` tables, `form_*` tables |
-| **CAKE** | `cake_*` tables |
-| **TRAC** | `trac_*` tables |
-| **MEDI** | `medi_*` tables |
-| **MINT** | `mint_*` tables (handled separately) |
-| **PORTAL** | `form_context_types` (shared with PACE) |
+| App | Tables | Permission Page |
+|-----|--------|-----------------|
+| **BASE** | `base_*` tables | (per-table pages) |
+| **PACE** | `pace_*` tables, `form_*` tables | (per-table pages) |
+| **CAKE** | `cake_*` tables | (per-table pages, e.g. `dishes`, `meals`, `unit-menu`) |
+| **TRAC** | `trac_*` tables | (per-table pages) |
+| **MEDI** | `medi_*` tables | (per-table pages) |
+| **MINT** | `mint_*` tables | `billing-control-panel` |
+| **PUMP** | `pump_*` tables | `CommsLog` (pump_scheduled_jobs), per-table pages (others) |
+| **PORTAL** | `form_context_types` (shared with PACE) | (per-table pages) |
 
 ## Testing Requirements
 
@@ -1165,7 +1183,7 @@ Tables are assigned to specific apps for RBAC permission checking:
 
 ### Test Coverage Requirements
 
-- [ ] Policy coverage: All tables (except mint_*) have RLS enabled and policies
+- [ ] Policy coverage: All tables have RLS enabled and policies
 - [ ] Performance: Queries complete in < 1 second
 - [ ] Security: Cross-organisation access is blocked
 - [ ] Helper functions: All are STABLE, SECURITY DEFINER (when needed), with `SET search_path TO public`
@@ -1244,7 +1262,7 @@ Rule IDs use the plugin prefix **`pace-core-compliance/`**. The following rules 
 - **`pace-core-compliance/rbac-permission-loading`** — Enforce loading state handling when using RBAC permission hooks.
 - **`pace-core-compliance/no-direct-rbac-rpc`** — Disallow direct RPC calls to rbac_*; use pace-core RBAC hooks/APIs.
 - **`pace-core-compliance/no-direct-rbac-table`** — Disallow direct queries to RBAC tables; use pace-core APIs.
-- **`pace-core-compliance/no-hardcoded-role-checks`** — Disallow hardcoded role checks; use useAccessLevel/getRoleContext from pace-core/rbac.
+- **`pace-core-compliance/no-hardcoded-role-checks`** — Disallow hardcoded role checks; use usePermissionLevel/getRoleContext from pace-core/rbac.
 - **`pace-core-compliance/rbac-use-resource-names-constants`** — Require RESOURCE_NAMES constants instead of string literals in useResourcePermissions.
 - **`pace-core-compliance/no-rbac-wrapper-components`** — Disallow wrapper components around pace-core RBAC components.
 - **`pace-core-compliance/no-rbac-wrapper-functions`** — Disallow wrapper functions around pace-core RBAC hooks.
@@ -1259,6 +1277,6 @@ These rules are part of the `pace-core-compliance` plugin and are enabled when e
 
 ---
 
-**Last Updated:** 2025-01-28  
-**Version:** 2.0.0  
+**Last Updated:** 2026-03-14
+**Version:** 2.1.0
 **Applies to:** All pace-core and consuming apps

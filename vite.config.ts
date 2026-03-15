@@ -10,7 +10,11 @@ const __dirname = fileURLToPath(new URL('.', import.meta.url))
 export default defineConfig({
   plugins: [react(), tailwind()],
   resolve: {
-    alias: { '@': path.resolve(__dirname, './src') },
+    alias: {
+      '@': path.resolve(__dirname, './src'),
+      // CJS "cookie" does not expose ESM named exports; cookie-es is ESM-compatible (parse, serialize).
+      cookie: 'cookie-es',
+    },
     dedupe: ['react', 'react-dom', 'react-router-dom'],
   },
   optimizeDeps: {

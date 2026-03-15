@@ -6,36 +6,45 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
+    "type-check": "tsc -b",
     "lint": "eslint .",
+    "test": "vitest run",
+    "test:coverage": "vitest run --coverage --coverage.provider=istanbul",
     "preview": "vite preview",
     "setup": "node node_modules/@jmruthers/pace-core/scripts/setup.cjs",
     "validate": "node node_modules/@jmruthers/pace-core/scripts/validate.cjs"
   },
   "dependencies": {
-    "react": "^19.2.0",
-    "react-dom": "^19.2.0",
-    "react-router-dom": "^6.0.0 || ^7.0.0",
-    "@tanstack/react-query": "^5.0.0",
-    "@supabase/supabase-js": "^2.0.0"
+    "@jmruthers/pace-core": "file:../pace-core2/packages/core",
+    "@supabase/supabase-js": "^2.49.1",
+    "@tanstack/react-query": "^5.90.0",
+    "@tanstack/react-table": "^8.21.3",
+    "cookie-es": "^2.0.0",
+    "react": "^19.2.3",
+    "react-day-picker": "^9.14.0",
+    "react-dom": "^19.2.3",
+    "react-router-dom": "^6.0.0 || ^7.0.0"
   },
   "devDependencies": {
     "@eslint/js": "^9.39.1",
+    "@tailwindcss/vite": "^4.1.16",
+    "@testing-library/jest-dom": "^6.6.3",
+    "@testing-library/react": "^16.0.0",
+    "@testing-library/user-event": "^14.0.0",
     "@types/node": "^24.10.1",
     "@types/react": "^19.2.7",
     "@types/react-dom": "^19.2.3",
-    "@vitejs/plugin-react": "^5.1.1",
+    "@vitejs/plugin-react": "^5.1.2",
+    "@vitest/coverage-istanbul": "^2.0.0",
     "eslint": "^9.39.1",
-    "eslint-plugin-react-hooks": "^7.0.1",
+    "eslint-plugin-react-hooks": "^5.2.0",
     "eslint-plugin-react-refresh": "^0.4.24",
     "globals": "^16.5.0",
+    "jsdom": "^25.0.0",
+    "tailwindcss": "^4.1.16",
     "typescript": "~5.9.3",
     "typescript-eslint": "^8.48.0",
     "vite": "^7.3.1",
-    "tailwindcss": "^4.0.0",
-    "@tailwindcss/vite": "^4.0.0",
-    "vitest": "^2.0.0",
-    "@testing-library/react": "^16.0.0",
-    "@testing-library/user-event": "^14.0.0",
-    "@vitest/coverage-istanbul": "^2.0.0"
+    "vitest": "^2.0.0"
   }
 }

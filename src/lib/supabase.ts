@@ -4,14 +4,13 @@
  * When VITE_SUPABASE_URL and VITE_SUPABASE_PUBLISHABLE_KEY are not set, a no-op placeholder
  * is exported so the app still runs (auth and org features will be inactive).
  */
-import { createClient } from '@supabase/supabase-js';
-import type { SupabaseClient } from '@supabase/supabase-js';
+import { createClient } from '@supabase/supabase-js'
 
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL ?? '';
-const supabasePublishableKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY ?? '';
+const supabaseUrl = import.meta.env.VITE_SUPABASE_URL ?? ''
+const supabasePublishableKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY ?? ''
 
-const hasConfig = Boolean(supabaseUrl && supabasePublishableKey);
+const hasConfig = Boolean(supabaseUrl && supabasePublishableKey)
 
-export const supabaseClient: SupabaseClient = hasConfig
+export const supabaseClient = hasConfig
   ? createClient(supabaseUrl, supabasePublishableKey)
-  : ({} as SupabaseClient);
+  : ({} as ReturnType<typeof createClient>)

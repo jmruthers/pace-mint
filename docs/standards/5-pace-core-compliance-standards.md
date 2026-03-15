@@ -415,7 +415,7 @@ const { data } = await secureSupabase.from('rbac_organisation_roles').select('*'
 
 **Severity**: Error
 
-Disallows hardcoded role checks. Use `useAccessLevel` hook or `getRoleContext` API from pace-core instead.
+Disallows hardcoded role checks. Use `usePermissionLevel` hook or `getRoleContext` API from pace-core instead.
 
 **Example Violation**:
 ```typescript
@@ -424,9 +424,9 @@ if (user.role === 'admin') { ... }
 if (currentRole === 'org_admin') { ... }
 
 // ✅ Good
-import { useAccessLevel } from '@jmruthers/pace-core/rbac';
-const { accessLevel } = useAccessLevel();
-if (accessLevel === 'admin') { ... }
+import { usePermissionLevel } from '@jmruthers/pace-core/rbac';
+const { permissionLevel } = usePermissionLevel();
+if (permissionLevel === 'admin') { ... }
 ```
 
 #### rbac-use-resource-names-constants

@@ -754,6 +754,296 @@ export const queryClient = new QueryClient({
 
 ---
 
+## Table Schema Standards
+
+Every new database table in the public schema **MUST** follow these conventions. All existing tables have been brought into compliance.
+
+### Table Naming
+
+Tables **MUST** use the `{app_prefix}_{entity}` naming convention:
+
+| App | Prefix |
+|---|---|
+| BASE | `base_` |
+| CAKE | `cake_` |
+| CORE | `core_` |
+| MEDI | `medi_` |
+| MINT | `mint_` |
+| PUMP | `pump_` |
+| RBAC | `rbac_` |
+| TRAC | `trac_` |
+
+New app prefixes must be registered in this table before use. Entity names use `snake_case` and should be singular nouns (e.g. `core_member`, not `core_members`).
+
+### Required Columns -- All Tables
+
+Every table **MUST** include these columns unless it qualifies for an explicit exception:
+
+```sql
+CREATE TABLE {prefix}_{entity} (
+  id            UUID          DEFAULT gen_random_uuid() PRIMARY KEY,
+  organisation_id UUID        NOT NULL REFERENCES core_organisations(id),
+  created_at    TIMESTAMPTZ   NOT NULL DEFAULT now(),
+  updated_at    TIMESTAMPTZ   NOT NULL DEFAULT now(),
+  created_by    UUID          REFERENCES auth.users(id),
+  updated_by    UUID          REFERENCES auth.users(id)
+);
+
+ALTER TABLE {prefix}_{entity} ENABLE ROW LEVEL SECURITY;
+```
+
+| Column | Type | Nullable | Default | Purpose |
+|---|---|---|---|---|
+| `id` | `UUID` | NOT NULL | `gen_random_uuid()` | Primary key. Domain-specific PKs (e.g. `VARCHAR`) are permitted with documented rationale. |
+| `organisation_id` | `UUID` | NOT NULL | -- | FK to `core_organisations(id)`. Required for RLS organisation scoping. |
+| `created_at` | `TIMESTAMPTZ` | NOT NULL | `now()` | Record creation timestamp. |
+| `updated_at` | `TIMESTAMPTZ` | NOT NULL | `now()` | Last modification timestamp. |
+| `created_by` | `UUID` | NULL | -- | FK to `auth.users(id)`. The user who created the record. |
+| `updated_by` | `UUID` | NULL | -- | FK to `auth.users(id)`. The user who last modified the record. |
+
+### Required Columns -- Event-Scoped Tables
+
+Tables that hold data created within an event context **MUST** also include:
+
+```sql
+  event_id      VARCHAR       NOT NULL REFERENCES core_events(event_id)
+```
+
+**Decision tree:** "Is this data created within an event context (e.g. a meal, a transport booking, a budget)?" If YES, add `event_id`.
+
+Tables that are org-level (e.g. suppliers, templates, payment methods, lookup types) do **NOT** need `event_id`.
+
+### Append-Only Log Tables
+
+Append-only tables (audit logs, webhook logs, mandate logs) follow a reduced set:
+
+- **MUST** have `organisation_id` (for RLS scoping)
+- **MUST** have `created_at`
+- **SHOULD** have a user-reference column (e.g. `user_id`, `accessed_by`, `changed_by`)
+- **MAY** omit `updated_by` and `updated_at` (records are never modified)
+
+### Exceptions to `organisation_id`
+
+These system-level tables are exempt from requiring `organisation_id`:
+
+| Table | Reason |
+|---|---|
+| `core_organisations` | IS the organisations table |
+| `core_field_list` | System metadata (field definitions shared across all orgs) |
+| `rbac_apps` | Global app registry |
+| `rbac_app_pages` | Global page definitions (child of rbac_apps) |
+| `rbac_policy_audit` | System-level policy change log |
+| `rbac_policy_configs` | System-level policy configuration |
+| `mint_idempotency` | System-level idempotency tracking |
+| `core_person` | Cross-org entity; `organisation_id` is nullable (a person can belong to multiple orgs) |
+
+Any new exception **MUST** be documented here with a rationale. Do not silently omit `organisation_id`.
+
+### RLS Enablement
+
+Every new table **MUST** have Row Level Security enabled:
+
+```sql
+ALTER TABLE {prefix}_{entity} ENABLE ROW LEVEL SECURITY;
+```
+
+This is non-negotiable. See [Security & RBAC Standards](./3-security-rbac-standards.md) for RLS policy patterns.
+
+### Indexing
+
+- **MUST** index `organisation_id` on every table that has it
+- **MUST** index `event_id` on every event-scoped table
+- **MUST NOT** index `created_by` or `updated_by` (audit found 90+ unused indexes on these columns)
+- **SHOULD** index foreign key columns used in JOINs or WHERE clauses
+
+```sql
+CREATE INDEX idx_{table}_organisation_id ON {table}(organisation_id);
+CREATE INDEX idx_{table}_event_id ON {table}(event_id);  -- if event-scoped
+```
+
+### New Table Checklist
+
+Before creating a new table, verify:
+
+- [ ] Name follows `{app_prefix}_{entity}` convention
+- [ ] Has `id UUID DEFAULT gen_random_uuid() PRIMARY KEY` (or documented alternative)
+- [ ] Has `organisation_id UUID NOT NULL REFERENCES core_organisations(id)` (or is in the exceptions list)
+- [ ] Has `created_at TIMESTAMPTZ NOT NULL DEFAULT now()`
+- [ ] Has `updated_at TIMESTAMPTZ NOT NULL DEFAULT now()`
+- [ ] Has `created_by UUID REFERENCES auth.users(id)`
+- [ ] Has `updated_by UUID REFERENCES auth.users(id)`
+- [ ] Has `event_id VARCHAR NOT NULL REFERENCES core_events(event_id)` if event-scoped
+- [ ] `ALTER TABLE ... ENABLE ROW LEVEL SECURITY` applied
+- [ ] Index on `organisation_id` created
+- [ ] Index on `event_id` created (if event-scoped)
+- [ ] RLS policies created (see Security & RBAC standards)
+
+---
+
+## Trigger Function Standards
+
+Database triggers are used for **cross-cutting concerns** that must fire consistently on every row change, regardless of which RPC, direct query, or service-role operation initiated it. Business logic belongs in RPC functions; triggers are reserved for the categories below.
+
+### When Triggers Are Appropriate
+
+Triggers **SHOULD** be used for:
+
+- **Audit fields** -- automatically setting `created_by`, `updated_by` on INSERT/UPDATE
+- **Timestamps** -- automatically setting `updated_at` on UPDATE
+- **Data integrity** -- enforcing constraints that span multiple tables (e.g., syncing `organisation_id` from a parent record, preventing circular references)
+- **Versioning** -- incrementing version counters on change (e.g., medical profile versioning)
+- **Singleton enforcement** -- ensuring only one record exists per scope (e.g., one default payment method)
+
+### When Triggers Are NOT Appropriate
+
+Triggers **MUST NOT** be used for:
+
+- **Business logic** -- use RPC functions (`data_*` / `app_*`) instead
+- **Complex workflows** -- multi-step operations belong in RPCs where they are visible and testable
+- **External side effects** -- sending notifications, calling APIs, etc. belong in Edge Functions or application code
+- **Conditional logic** based on user permissions -- use RLS policies or RPC-level RBAC checks
+
+### Required Attributes
+
+Every trigger function **MUST** have:
+
+| Requirement | Why | Example |
+|---|---|---|
+| `VOLATILE` | Required by PostgreSQL for trigger functions | `VOLATILE` |
+| `SET search_path TO public` | **MANDATORY** -- prevents search-path injection | `SET search_path TO public` |
+| `COMMENT ON FUNCTION` | **REQUIRED** -- documents purpose and security rationale | See example below |
+| `RETURNS trigger` | Required by PostgreSQL for trigger functions | `RETURNS trigger` |
+
+### Security Requirements
+
+| Pattern | When to use |
+|---|---|
+| `SECURITY DEFINER` | When the trigger needs to access `auth.uid()` or query RLS-protected tables |
+| `SECURITY INVOKER` | For pure validation triggers that only inspect the incoming row data |
+
+### Naming Conventions
+
+Trigger functions follow these naming patterns based on their purpose:
+
+| Pattern | Purpose | Examples |
+|---|---|---|
+| `handle_*` | Audit field and user registration triggers | `handle_audit_fields`, `handle_created_by`, `handle_new_user` |
+| `update_*_updated_at` | Table-specific timestamp triggers | `update_base_units_updated_at`, `update_medi_updated_at_column` |
+| `validate_*` | Input validation triggers | `validate_base_question_options`, `validate_data_retention` |
+| `prevent_*` | Constraint enforcement (preventing invalid state) | `prevent_created_by_modification`, `prevent_budget_circular_reference` |
+| `enforce_*` | Singleton or uniqueness enforcement | `enforce_singleton_form_context` |
+| `sync_*` | Cross-table data synchronisation | `sync_base_unit_roles_event_org` |
+| `set_*` / `*_set_*` | Auto-populating derived columns | `set_pace_merchandise_organisation_id`, `pace_contact_set_user_id` |
+| `check_*` | Referential integrity checks | `check_circular_unit_reference` |
+| `ensure_*` | Business rule enforcement | `ensure_single_default_payment_method` |
+| `recalculate_*` | Derived value recalculation | `recalculate_budget_totals_on_variable_change` |
+
+### Example: Trigger Function with All Requirements
+
+```sql
+CREATE OR REPLACE FUNCTION handle_updated_by()
+RETURNS trigger
+LANGUAGE plpgsql
+VOLATILE
+SECURITY DEFINER
+SET search_path TO public
+AS $$
+BEGIN
+  NEW.updated_by := auth.uid();
+  RETURN NEW;
+END;
+$$;
+
+COMMENT ON FUNCTION handle_updated_by() IS
+  'Trigger function: sets updated_by to current user on UPDATE. SECURITY DEFINER required to access auth.uid(). SET search_path TO public prevents search-path injection.';
+
+CREATE TRIGGER set_updated_by
+  BEFORE UPDATE ON {prefix}_{entity}
+  FOR EACH ROW
+  EXECUTE FUNCTION handle_updated_by();
+```
+
+### New Trigger Checklist
+
+Before creating a new trigger function, verify:
+
+- [ ] Purpose falls within the "appropriate" categories above
+- [ ] Function is `VOLATILE` and `RETURNS trigger`
+- [ ] `SET search_path TO public` is present (MANDATORY)
+- [ ] Security mode is correct (`DEFINER` for `auth.uid()` access, `INVOKER` for pure validation)
+- [ ] Function name follows the naming conventions above
+- [ ] `COMMENT ON FUNCTION` documents purpose and security rationale
+- [ ] `CREATE TRIGGER` statement binds the function to the correct table(s)
+- [ ] Trigger timing is correct (`BEFORE` for value-setting, `AFTER` for side-effect triggers)
+
+### Reference
+
+See [triggers.md](../database/triggers.md) for the complete inventory of all 24 trigger functions in production.
+
+---
+
+## TypeScript Type Strategy
+
+pace-core uses **hand-written TypeScript types** as the public API contract, not auto-generated Supabase types. This is a deliberate architectural choice for a shared UI/auth library consumed by multiple apps.
+
+### Hand-Written Types (Public API)
+
+Hand-written types in `packages/core/src/types/` represent the **public contract** exposed to consuming apps. They are intentionally narrower than the full database schema:
+
+- Only columns needed by pace-core consumers are exposed
+- Property names may differ from DB column names for better ergonomics (e.g. `timestamp` instead of `login_timestamp`)
+- Nullable DB columns may be typed as non-nullable when defaults guarantee population
+
+### Generated Types (Validation Reference)
+
+The file `docs/database/generated-types.txt` contains the complete Supabase-generated schema (all tables, views, RPCs, and enums). It **MUST NOT** be imported by application code. Its purpose is:
+
+- Verifying hand-written types stay in sync with schema changes
+- Catching new columns that should be exposed
+- Detecting nullability drift
+- **MUST** be regenerated when the database schema changes
+
+### Deliberate Narrowing
+
+TS types **MAY** be non-nullable where the DB column is technically nullable but has a `DEFAULT` that guarantees population. This applies to:
+
+- `created_at` / `updated_at` columns with `DEFAULT now()` -- TS types `string`, DB is `string | null`
+- `is_active` / `is_public` columns with `DEFAULT true/false` -- TS types `boolean`, DB is `boolean | null`
+
+This narrowing is safe in the read direction and improves developer ergonomics. The type-alignment audit documents all deliberate narrowings.
+
+### Property Renaming
+
+When a TS property name differs from its DB column name, a **mapping function MUST exist** at the query layer that transforms DB rows to the public type shape. Examples:
+
+- `LoginRecord.timestamp` maps from `rbac_user_login_history.login_timestamp` via `mapRawRowToLoginRecord`
+- `LoginRecord.ip` maps from `rbac_user_login_history.ip_address` via `mapRawRowToLoginRecord`
+- `EventStub.id` maps from `core_events.event_id` via the EventService query layer
+
+### Branded Types
+
+pace-core provides branded ID types for compile-time safety:
+
+| Type | Underlying | Used For |
+|---|---|---|
+| `UserId` | `string & { __brand: 'UserId' }` | `auth.users.id`, FK columns |
+| `OrganisationId` | `string & { __brand: 'OrganisationId' }` | `core_organisations.id`, FK columns |
+| `EventId` | `string & { __brand: 'EventId' }` | `core_events.event_id`, FK columns |
+| `AppId` | `string & { __brand: 'AppId' }` | `rbac_apps.id`, FK columns |
+| `PageId` | `string & { __brand: 'PageId' }` | `rbac_app_pages.id`, FK columns |
+
+Branding is erased at runtime (no serialisation impact). Use the `create*` helpers (`createUserId`, `createOrganisationId`, etc.) to construct branded values.
+
+### App-Specific Types
+
+Consuming apps (pace-cake, pace-trac, etc.) that work with many domain-specific tables **SHOULD** consider using Supabase-generated types directly, since they need 1:1 schema coverage and benefit from automated drift detection. pace-core's hand-written approach is optimised for its role as a narrow shared library.
+
+### Type-Alignment Audit
+
+The living comparison document at [docs/database/type-alignment.md](../database/type-alignment.md) tracks alignment between hand-written types and the database schema. It **SHOULD** be reviewed and updated whenever types or schema change.
+
+---
+
 ## API Design Checklist
 
 Before creating or updating an API/RPC, verify:
@@ -792,6 +1082,6 @@ These rules are part of the `pace-core-compliance` plugin and are enabled when e
 
 ---
 
-**Last Updated:** 2025-01-28  
-**Version:** 2.0.0  
+**Last Updated:** 2026-03-14  
+**Version:** 2.1.0  
 **Applies to:** All pace-core and consuming apps

@@ -335,9 +335,9 @@ if (user.role === 'admin') {
 
 ```tsx
 // ✅ CORRECT
-import { useAccessLevel, getRoleContext } from '@jmruthers/pace-core/rbac';
+import { usePermissionLevel, getRoleContext } from '@jmruthers/pace-core/rbac';
 
-const { accessLevel } = useAccessLevel(userId, scope);
+const { permissionLevel } = usePermissionLevel(userId, scope);
 const roleContext = await getRoleContext({ userId, scope });
 ```
 
@@ -426,7 +426,7 @@ Before committing RBAC-related code, verify:
 - [ ] All `useResourcePermissions` calls use `RESOURCE_NAMES` constants
 - [ ] No direct RPC calls to `rbac_check_permission_simplified`
 - [ ] No direct queries to RBAC tables (use `useSecureSupabase` if needed)
-- [ ] No hardcoded role checks (use `useAccessLevel` or `getRoleContext`)
+- [ ] No hardcoded role checks (use `usePermissionLevel` or `getRoleContext`)
 - [ ] No custom permission utility functions
 - [ ] All access denied scenarios use `AccessDenied` from pace-core
 - [ ] `enforcePermissions` configured correctly for app type
