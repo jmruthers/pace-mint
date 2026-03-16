@@ -15,14 +15,6 @@ vi.mock('@jmruthers/pace-core', async (importOriginal) => {
     CardHeader: ({ children }: { children: React.ReactNode }) => <header>{children}</header>,
     CardTitle: ({ children }: { children: React.ReactNode }) => <h2>{children}</h2>,
     LoadingSpinner: () => <div data-testid="loading-spinner">Loading</div>,
-    OrganisationServiceProvider: ({
-      children,
-    }: {
-      children: React.ReactNode
-      supabaseClient: unknown
-      user: unknown
-      session: unknown
-    }) => <div data-testid="org-provider">{children}</div>,
   }
 })
 
@@ -50,7 +42,7 @@ describe('AppContent', () => {
     renderWithRouter('/', <AppContent><span>Child</span></AppContent>)
     expect(screen.getByTestId('loading-spinner')).toBeInTheDocument()
     expect(screen.getByText('Loading session…')).toBeInTheDocument()
-    expect(screen.queryByTestId('org-provider')).not.toBeInTheDocument()
+    expect(screen.queryByText('Child')).not.toBeInTheDocument()
   })
 
   it('does not show loading UI when on login route', () => {
@@ -62,7 +54,7 @@ describe('AppContent', () => {
     })
     renderWithRouter('/login', <AppContent><span>Child</span></AppContent>)
     expect(screen.queryByTestId('loading-spinner')).not.toBeInTheDocument()
-    expect(screen.getByTestId('org-provider')).toBeInTheDocument()
+    expect(screen.getByText('Child')).toBeInTheDocument()
   })
 
   it('shows error UI when sessionRestoration.error is set and not on login route', () => {
@@ -79,19 +71,17 @@ describe('AppContent', () => {
     expect(screen.getByRole('button', { name: 'Reload' })).toBeInTheDocument()
   })
 
-  it('renders OrganisationServiceProvider with children when not loading and no error', () => {
+  it('renders children when not loading and no error', () => {
     mockUseUnifiedAuth.mockReturnValue({
       isLoading: false,
       sessionRestoration: { error: null },
       user: { id: 'u1' },
       session: {},
     })
-    const { container } = renderWithRouter(
+    renderWithRouter(
       '/',
       <AppContent><span>Child content</span></AppContent>
     )
-    const orgProvider = container.querySelector('[data-testid="org-provider"]')
-    expect(orgProvider).toBeInTheDocument()
     expect(screen.getByText('Child content')).toBeInTheDocument()
   })
 })

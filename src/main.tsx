@@ -2,22 +2,26 @@ import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import { BrowserRouter } from 'react-router-dom'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { UnifiedAuthProvider, InactivityWarningModal } from '@jmruthers/pace-core'
+import { UnifiedAuthProvider, InactivityWarningModal, QueryRetryHandler, queryErrorHandler } from '@jmruthers/pace-core'
 import { setupRBAC } from '@jmruthers/pace-core/rbac'
 import './app.css'
 import App from './App.tsx'
+import { MintShellProviders } from '@/components/MintShellProviders'
 import { supabaseClient } from './lib/supabase'
 import { APP_NAME } from '@/lib/constants/app-name'
 
-setupRBAC(supabaseClient)
+setupRBAC(supabaseClient, { appName: APP_NAME })
 
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
-      retry: 1,
+      retry: QueryRetryHandler,
       staleTime: 5 * 60 * 1000,
       gcTime: 10 * 60 * 1000,
       refetchOnWindowFocus: false,
+      meta: {
+        onError: (error: unknown) => queryErrorHandler(error, 'Query'),
+      },
     },
   },
 })
@@ -40,9 +44,11 @@ createRoot(document.getElementById('root')!).render(
           />
         )}
       >
-        <StrictMode>
-          <App />
-        </StrictMode>
+        <MintShellProviders>
+          <StrictMode>
+            <App />
+          </StrictMode>
+        </MintShellProviders>
       </UnifiedAuthProvider>
     </BrowserRouter>
   </QueryClientProvider>,

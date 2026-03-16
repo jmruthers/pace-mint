@@ -7,9 +7,7 @@ import {
   CardTitle,
   Button,
   LoadingSpinner,
-  OrganisationServiceProvider,
 } from '@jmruthers/pace-core'
-import { supabaseClient } from '@/lib/supabase'
 
 const LOGIN_PATH = '/login'
 
@@ -33,6 +31,7 @@ export function AppContent({ children }: AppContentProps) {
     )
   }
 
+  // M01b: global auth error UI; pace-core exposes via sessionRestoration.error (no authError)
   const authError = auth.sessionRestoration?.error ?? null
   if (authError && !isLoginRoute) {
     return (
@@ -55,13 +54,5 @@ export function AppContent({ children }: AppContentProps) {
     )
   }
 
-  return (
-    <OrganisationServiceProvider
-      supabaseClient={supabaseClient}
-      user={auth.user}
-      session={auth.session}
-    >
-      {children}
-    </OrganisationServiceProvider>
-  )
+  return <>{children}</>
 }

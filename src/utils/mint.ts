@@ -1,8 +1,5 @@
-import type { MintContext } from '@/types/mint'
-
 /**
- * Returns the current event finance context if set (shell: returns null).
+ * MINT utils. getCurrentEventFinanceContext is implemented in useEventFinanceContext
+ * (updates from pace-core org/event context) and re-exported here for the public contract.
  */
-export function getCurrentEventFinanceContext(): MintContext | null {
-  return null
-}
+export { getCurrentEventFinanceContext } from '@/hooks/useEventFinanceContext'

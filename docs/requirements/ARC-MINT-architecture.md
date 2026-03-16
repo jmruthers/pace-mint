@@ -490,6 +490,7 @@ The existing schema contains useful MINT foundations (e.g. `mint_budget_variable
 ### References
 
 - Existing MINT schema as uploaded. pace-core reuse rules from Standard 05.
+- [M01 – MINT Shell & Foundations](implemented/M01-mint-shell-foundations.md) (§ Supabase and RBAC setup): required RPCs in the pace-mint Supabase project and app bootstrap (setupRBAC, UnifiedAuthProvider, OrganisationServiceProvider, EventServiceProvider) so RBAC and context loading work.
 
 ---
 
