@@ -8,47 +8,48 @@
 @import "@jmruthers/pace-core/styles/core.css";
 
 @theme static {
-  /* Main palette - Primary brand color (all shades 50-950 required) */
-  --color-main-raw: oklch(0.58 0.23 300);
-  --color-main-50: oklch(0.98 0.003 300);
-  --color-main-100: oklch(0.96 0.014 300);
-  --color-main-200: oklch(0.927 0.033 300);
-  --color-main-300: oklch(0.881 0.059 300);
-  --color-main-400: oklch(0.822 0.093 300);
-  --color-main-500: oklch(0.75 0.133 300);
-  --color-main-600: oklch(0.665 0.182 300);
-  --color-main-700: oklch(0.58 0.23 300);
-  --color-main-800: oklch(0.456 0.158 300);
-  --color-main-900: oklch(0.332 0.099 300);
-  --color-main-950: oklch(0.195 0.047 300);
+/* mint main = mint */
+--color-main-raw: oklch(0.76 0.211 144.65);
+--color-main-50: oklch(0.98 0.005 144.65);
+--color-main-100: oklch(0.96 0.023 144.65);
+--color-main-200: oklch(0.927 0.054 144.65);
+--color-main-300: oklch(0.881 0.097 144.65);
+--color-main-400: oklch(0.822 0.153 144.65);
+--color-main-500: oklch(0.76 0.211 144.65);
+--color-main-600: oklch(0.665 0.179 144.65);
+--color-main-700: oklch(0.567 0.147 144.65);
+--color-main-800: oklch(0.456 0.114 144.65);
+--color-main-900: oklch(0.332 0.079 144.65);
+--color-main-950: oklch(0.195 0.044 144.65);
 
-  /* Secondary palette - Supporting color (all shades 50-950 required) */
-  --color-sec-raw: oklch(0.675 0.169 244.75);
-  --color-sec-50: oklch(0.98 0.003 244.75);
-  --color-sec-100: oklch(0.96 0.014 244.75);
-  --color-sec-200: oklch(0.927 0.032 244.75);
-  --color-sec-300: oklch(0.881 0.057 244.75);
-  --color-sec-400: oklch(0.822 0.089 244.75);
-  --color-sec-500: oklch(0.75 0.128 244.75);
-  --color-sec-600: oklch(0.675 0.169 244.75);
-  --color-sec-700: oklch(0.567 0.134 244.75);
-  --color-sec-800: oklch(0.456 0.101 244.75);
-  --color-sec-900: oklch(0.332 0.068 244.75);
-  --color-sec-950: oklch(0.195 0.037 244.75);
+/* mint sec = lightseagreen */
+--color-sec-raw: oklch(0.685 0.117 193.27);
+--color-sec-50: oklch(0.98 0.002 193.27);
+--color-sec-100: oklch(0.96 0.01 193.27);
+--color-sec-200: oklch(0.927 0.023 193.27);
+--color-sec-300: oklch(0.881 0.04 193.27);
+--color-sec-400: oklch(0.822 0.063 193.27);
+--color-sec-500: oklch(0.75 0.091 193.27);
+--color-sec-600: oklch(0.685 0.117 193.27);
+--color-sec-700: oklch(0.567 0.092 193.27);
+--color-sec-800: oklch(0.456 0.07 193.27);
+--color-sec-900: oklch(0.332 0.048 193.27);
+--color-sec-950: oklch(0.195 0.026 193.27);
 
-  /* Accent palette - Highlight color (all shades 50-950 required) */
-  --color-acc-raw: oklch(0.64 0.23 7.385);
-  --color-acc-50: oklch(0.98 0.003 7.385);
-  --color-acc-100: oklch(0.96 0.017 7.385);
-  --color-acc-200: oklch(0.927 0.039 7.385);
-  --color-acc-300: oklch(0.881 0.069 7.385);
-  --color-acc-400: oklch(0.822 0.109 7.385);
-  --color-acc-500: oklch(0.75 0.157 7.385);
-  --color-acc-600: oklch(0.64 0.23 7.385);
-  --color-acc-700: oklch(0.567 0.193 7.385);
-  --color-acc-800: oklch(0.456 0.142 7.385);
-  --color-acc-900: oklch(0.332 0.092 7.385);
-  --color-acc-950: oklch(0.195 0.047 7.385);
+/* mint acc = tangerine */
+--color-acc-raw: oklch(0.745 0.166 65.91045);
+--color-acc-50: oklch(0.98 0.003 65.91045);
+--color-acc-100: oklch(0.96 0.017 65.91045);
+--color-acc-200: oklch(0.927 0.04 65.91045);
+--color-acc-300: oklch(0.881 0.072 65.91045);
+--color-acc-400: oklch(0.822 0.112 65.91045);
+--color-acc-500: oklch(0.745 0.166 65.91045);
+--color-acc-600: oklch(0.665 0.144 65.91045);
+--color-acc-700: oklch(0.567 0.119 65.91045);
+--color-acc-800: oklch(0.456 0.092 65.91045);
+--color-acc-900: oklch(0.332 0.064 65.91045);
+--color-acc-950: oklch(0.195 0.035 65.91045);
+
 }
 
 /* App root (React mount in index.html) */
